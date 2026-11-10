@@ -1,5 +1,7 @@
 # Local build artifacts and signing secrets
-/build/
+**/build/
+/.gradle/
+/.android-sdk/
 /out/
 *.apk
 *.aab
@@ -12,3 +14,5 @@ local.properties
 *.log
 .DS_Store
 Thumbs.db
+
+/.kotlin/

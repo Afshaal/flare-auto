@@ -2,7 +2,7 @@
 
 ## Dashline
 
-Session selection and metadata behavior adapted from [Dashline MediaMonitor](https://github.com/metehankaygsz/dashline). Copyright 2026 Metehan Kaygisiz. Licensed under GPL-3.0-only; see [LICENSE](LICENSE). The playback control geometry is also based on Dashline.
+Session selection and metadata behavior adapted from [Dashline MediaMonitor](https://github.com/metehankaygsz/dashline). Copyright 2026 Metehan Kaygisiz. Licensed under GPL-3.0-only; see [LICENSE](LICENSE). The playback control geometry is also based on Dashline. Adapted files: `src/app/flare/auto/NowPlaying.kt` and `src/app/flare/auto/MediaGlyph.kt`; modification notices are retained in those files.
 
 ## Gradient palette
 

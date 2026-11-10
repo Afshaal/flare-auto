@@ -1,3 +1,0 @@
-package app.flare.auto;
-import android.content.*;
-final class DockOrder {static final String[] NAMES={"Audio","Radio","Bluetooth","Screen off","Apps"};static int[] read(SharedPreferences p){int[] a={0,1,2,3,4};try{String[] s=p.getString("dock_order","0,1,2,3,4").split(",");boolean[] used=new boolean[5];for(int i=0;i<5;i++){int n=Integer.parseInt(s[i]);if(n<0||n>4||used[n])throw new Exception();used[n]=true;a[i]=n;}}catch(Exception e){return new int[]{0,1,2,3,4};}return a;}static void save(SharedPreferences p,int[] a){p.edit().putString("dock_order",a[0]+","+a[1]+","+a[2]+","+a[3]+","+a[4]).apply();}}
