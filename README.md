@@ -84,8 +84,6 @@ Flare Auto provides shortcuts to projection apps; it does not provide CarPlay or
 
 Install the appropriate app on the head unit, then assign it to the matching shortcut in **Launcher settings**. Already using ZLink or another compatible projection app? Assign it to the CarPlay or Android Auto button in Launcher settings. The button opens the selected app; connection and compatibility depend on that app and the head unit.
 
-Compatibility depends on the head unit, firmware and phone. DiAuto was designed for BYD DiLink, so check its documentation before using it on another device.
-
 ### Performance
 
 To disable Android's interface animations:
