@@ -65,6 +65,39 @@ Other devices may behave differently. Vendor-specific shortcuts and startup sour
 
 Keep another launcher installed while checking compatibility. Updates must use the same signing key as the installed copy.
 
+## Recommended setup
+
+Flare Auto is designed primarily for low-performance Android head units with limited RAM. On these devices, disabling Android's interface animations can make navigation feel quicker.
+
+### CarPlay and Android Auto
+
+Flare Auto provides shortcuts to projection apps; it does not provide CarPlay or Android Auto itself.
+
+- **Apple CarPlay:** Try [DiPlay](https://github.com/shihabal3amri/DiPlay) on compatible head units.
+- **Android Auto:** Try [DiAuto](https://github.com/shihabal3amri/DiAuto) on compatible head units.
+
+Install the appropriate app on the head unit, then assign it to the matching shortcut in **Launcher settings**. Already using ZLink or another compatible projection app? Assign it to the CarPlay or Android Auto button in Launcher settings. The button opens the selected app; connection and compatibility depend on that app and the head unit.
+
+Compatibility depends on the head unit, firmware and phone. DiAuto was designed for BYD DiLink, so check its documentation before using it on another device.
+
+### Performance
+
+To disable Android's interface animations:
+
+1. Open **Android Settings → Developer options**.
+2. Set **Window animation scale**, **Transition animation scale**, and **Animator duration scale** to **Animation off**.
+
+This removes visual transitions and can make the interface feel more responsive. It won't necessarily improve playback or app performance.
+
+If you're comfortable with ADB, review preinstalled apps and disable ones you've confirmed are unnecessary. Record your changes so you can reverse them, and test radio, Bluetooth and the backup camera afterward. System packages vary by device, so avoid applying a generic removal list.
+
+## Roadmap
+
+- Add polished launcher animations with a setting to turn them on or off.
+- Add more home-screen widgets and customization options.
+
+These are planned ideas, not features available in the current release.
+
 ## Permissions and privacy
 
 The launcher requests location for sunrise and sunset, network state for connection indicators, and Bluetooth access for status. Media access is optional and requires the Android notification-listener setting. Solar times use the last known device location or manually entered coordinates; when neither is available, the display shows `--:--`. The device time zone is used.
