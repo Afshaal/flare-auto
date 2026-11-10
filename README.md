@@ -97,10 +97,16 @@ If you're comfortable with ADB, review preinstalled apps and disable ones you've
 
 ## Roadmap
 
-- Add polished launcher animations with a setting to turn them on or off.
-- Add more home-screen widgets and customization options.
+The next release is planned to move Flare Auto to **Kotlin** and expand its functionality, while keeping it lightweight for lower-performance head units.
 
-These are planned ideas, not features available in the current release.
+- **Optional animations:** Polished transitions with a toggle to turn them off.
+- **More home-screen widgets:** Additional cards and options for arranging them.
+- **Better media handling:** Improve source selection and investigate artwork disappearing after switching to Bluetooth.
+- **More personalization:** Additional ways to configure shortcuts, icons, and card layouts.
+- **Setup improvements:** Make permissions and first-time configuration easier to understand.
+- **Performance:** Continue reducing unnecessary background work and memory use.
+
+These are planned features and may change.
 
 ## Permissions and privacy
 
