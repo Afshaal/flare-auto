@@ -83,6 +83,7 @@ class HomeActivity : Activity() {
 
     private val tick = object : Runnable {
         override fun run() {
+            if (theme !== ThemeTokens.get(this@HomeActivity)) build()
             date.text = dateFormat.format(Date())
             environment?.let {
                 it.updateSolar()
@@ -634,7 +635,7 @@ class HomeActivity : Activity() {
         super.onResume()
         if (attachedScale != prefs.getInt("ui_scale_home", 100)) { recreate(); return }
         resumed = true
-        if (uiDirty) {
+        if (uiDirty || theme !== ThemeTokens.get(this)) {
             build()
             uiDirty = false
         } else {
@@ -858,7 +859,7 @@ class HomeActivity : Activity() {
 
     companion object {
         private val UI_KEYS = setOf(
-                "theme", "accent_color", "brand_text", "badge_text", "brand_color", "badge_color", "widget_left", "widget_right", "home_clock_style", "solar_manual", "solar_lat", "solar_lon",
+                "theme_mode", "theme_day_hour", "theme_night_hour", "light_theme_index", "dark_theme_index", "theme", "accent_color", "brand_text", "badge_text", "brand_color", "badge_color", "widget_left", "widget_right", "home_clock_style", "solar_manual", "solar_lat", "solar_lon",
                 "custom_revision", "home_wallpaper", "wallpaper_home_v2", "glass_cards", "weather_enabled", "weather_age_days", "weather_fahrenheit", "flip_gradients", "split", "spacing",
                 "dock", "dock_order", "dock_items", "dock_mono", "dock_labels", "dock_icons", "text",
                 "projection", "media", "clock24", "layout_left", "layout_right", "layout_apps"

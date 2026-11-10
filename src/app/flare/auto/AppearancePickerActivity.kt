@@ -36,7 +36,7 @@ class AppearancePickerActivity : Activity() {
             else -> WallpaperPack.HOME_NAMES
         }
         val selected = when {
-            isTheme -> ThemeTokens.index(this)
+            isTheme -> ThemeTokens.activeIndex(this)
             isDrawer -> WallpaperPack.drawerSelection(this) + 2
             else -> WallpaperPack.index(this, isSaver)
         }

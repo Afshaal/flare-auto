@@ -96,7 +96,17 @@ class SettingsActivity : Activity() {
         setContentView(root)
 
         var group = section("APPEARANCE")
-        row(group, "Theme", ThemeTokens.NAMES[ThemeTokens.index(this)]) { appearance("theme") }
+        row(group, "Color mode", ThemeTokens.mode(this)) {
+            ThemedDialogs.Builder(this).setTitle("Color mode")
+                .setItems(arrayOf("Dark", "Light", "Automatic")) { _, selected ->
+                    prefs.edit().putString("theme_mode", arrayOf("dark", "light", "auto")[selected]).apply()
+                    ThemeTokens.invalidate()
+                    ui.recolor(root)
+                }.show()
+        }
+        step(group, "Day mode starts (hour)", "theme_day_hour", 0, 23, 7, 1)
+        step(group, "Night mode starts (hour)", "theme_night_hour", 0, 23, 19, 1)
+        row(group, "Theme", ThemeTokens.NAMES[ThemeTokens.activeIndex(this)]) { appearance("theme") }
         row(group, "Home wallpaper", WallpaperPack.name(this, false)) { appearance("home") }
         row(group, "App drawer wallpaper", drawerWallpaperName()) { appearance("drawer") }
         toggle(group, "Glass cards", "glass_cards", true)
@@ -318,7 +328,8 @@ class SettingsActivity : Activity() {
         val target = view.getChildAt(1) as TextView
         refreshers.add {
             val value = when (name) {
-                "Theme" -> ThemeTokens.NAMES[ThemeTokens.index(this)]
+                "Color mode" -> ThemeTokens.mode(this)
+                "Theme" -> ThemeTokens.NAMES[ThemeTokens.activeIndex(this)]
                 "Home scale" -> scaleName("ui_scale_home")
                 "App drawer scale" -> scaleName("ui_scale_drawer")
                 "Settings scale" -> scaleName("ui_scale_settings")

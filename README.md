@@ -41,6 +41,8 @@ Screenshots show a demonstration media track and artwork.
 
 **Make it yours**
 
+- Three light palettes (Daylight Silver, Warm Ivory, Cool Pearl), dark/light selection, and automatic switching at configurable device-local hours under Appearance (default 07:00–19:00). Theme selection remembers separate light/dark palettes; selecting a palette keeps Automatic mode enabled.
+
 - Dark themes, accent color, optional glass-style cards and gradient wallpapers.
 - Custom images for Home, the app drawer and screensaver.
 - Changeable vehicle label and badge text.
