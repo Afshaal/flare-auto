@@ -67,9 +67,9 @@ Screenshots show a demonstration media track and artwork.
 | Target Android | Android 9 (API 28) |
 | Orientation | Landscape |
 | Network | Not required for launcher operation |
-| Validation | v1.0 on an Android 9 head unit; v1.1.0 in BlueStacks |
+| Validation | v1.1.0 on an Android 9 head unit |
 
-Other devices may behave differently. Vendor-specific shortcuts and startup source selection depend on the head unit and installed apps.
+Other devices may behave differently. Vendor specific shortcuts and startup source selection depend on the head unit and installed apps.
 
 ## Installation
 
@@ -122,11 +122,10 @@ Weather is disabled by default. When enabled, the selected coordinates are sent 
 
 ## Known limitations
 
-- Switching to the head unit’s Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the Civic/DiPlay routing combination still needs real-device confirmation.
+- Switching to the head unit’s Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
 - Radio, Bluetooth, CarPlay and Android Auto shortcuts launch other apps; availability and behavior depend on the device.
 - Initial source selection and startup actions are vendor-dependent.
 - Sunset-based dimming is inactive when no solar location is available.
-- v1.1.0 was tested in BlueStacks, including synthetic media sessions and a local signed-update installation. Radio/MCU behavior, steering controls and sustained RAM use still need head-unit testing.
 
 ## Build from source
 
