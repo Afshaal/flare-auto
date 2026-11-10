@@ -1,0 +1,14 @@
+# Local build artifacts and signing secrets
+/build/
+/out/
+*.apk
+*.aab
+*.jks
+*.keystore
+*.p12
+keystore.properties
+local.properties
+.env
+*.log
+.DS_Store
+Thumbs.db
