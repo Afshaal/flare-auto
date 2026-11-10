@@ -69,8 +69,6 @@ Other devices may behave differently. Vendor-specific shortcuts and startup sour
 3. Open Flare Auto and select it as the default Home app when prompted, or use the **Default launcher** option in Launcher settings.
 4. Configure app shortcuts in Launcher settings. Grant **Media access** to display supported media sessions, and grant location access or enter coordinates for sunrise and sunset.
 
-Keep another launcher installed while checking compatibility. Updates must use the same package ID and signing key as the installed copy. The `app.flare.auto` package installs separately from older `local.civic.home` builds, and settings do not transfer automatically.
-
 ## Recommended setup
 
 Flare Auto is designed primarily for low-performance Android head units with limited RAM. On these devices, disabling Android's interface animations can make navigation feel quicker.
