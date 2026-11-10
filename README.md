@@ -52,7 +52,7 @@ Screenshots show a demonstration media track and artwork.
 | Target Android | Android 9 (API 28) |
 | Orientation | Landscape |
 | Network | Not required for launcher operation |
-| Tested device | Owner-tested on an Android 9 Civic head unit |
+| Tested device | Android 9 head unit |
 
 Other devices may behave differently. Vendor-specific shortcuts and startup source selection depend on the head unit and installed apps.
 
