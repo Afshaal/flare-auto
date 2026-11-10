@@ -1,7 +1,7 @@
 <div align="center">
   <img src="docs/flare-auto-icon.svg" width="256" height="256" alt="Flare Auto icon" />
   <h1>Flare Auto</h1>
-  <p><strong>An open-source, offline Android launcher designed for car head units.</strong></p>
+  <p><strong>An open-source launcher designed for car head units.</strong></p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--only-blue.svg" alt="License: GPL-3.0-only" /></a>
     <a href="https://github.com/Afshaal/flare-auto/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="Pull requests welcome" /></a>
