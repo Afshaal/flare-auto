@@ -1,7 +1,21 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
+
+/**
+ * Release signing comes from an untracked keystore.properties next to settings.gradle.kts, or from the
+ * environment. Without either, release APKs are built unsigned (sign them afterwards) and debug builds are
+ * unaffected. Keys: storeFile, storePassword, keyAlias, keyPassword, storeType (optional, e.g. pkcs12).
+ * Environment: FLARE_KEYSTORE, FLARE_KEYSTORE_PASSWORD, FLARE_KEY_ALIAS, FLARE_KEY_PASSWORD, FLARE_KEYSTORE_TYPE.
+ */
+val signing = Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.isFile }?.inputStream()?.use { load(it) }
+}
+fun secret(key: String, env: String): String? = signing.getProperty(key) ?: System.getenv(env)
+val releaseStore = secret("storeFile", "FLARE_KEYSTORE")
 
 android {
     namespace = "app.flare.auto"
@@ -24,6 +38,36 @@ android {
         }
         getByName("test") {
             java.setSrcDirs(listOf("../test"))
+        }
+    }
+
+    signingConfigs {
+        if (releaseStore != null) create("release") {
+            storeFile = rootProject.file(releaseStore)
+            storePassword = secret("storePassword", "FLARE_KEYSTORE_PASSWORD")
+            keyAlias = secret("keyAlias", "FLARE_KEY_ALIAS")
+            keyPassword = secret("keyPassword", "FLARE_KEY_PASSWORD")
+            secret("storeType", "FLARE_KEYSTORE_TYPE")?.let { storeType = it }
+        }
+    }
+
+    buildTypes {
+        getByName("release") {
+            // R8 + resource shrinking. Everything looked up by name at runtime is kept: drawables in
+            // res/raw/keep.xml, library code in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseStore != null) signingConfig = signingConfigs.getByName("release")
+        }
+        getByName("debug") {
+            // Verification aid: `./gradlew assembleDebug -Pflare.minifyDebug=true` builds the debug harnesses with the
+            // release R8 rules, so the shrunk app can be exercised on a device (SmokeActivity, check activities).
+            if (project.findProperty("flare.minifyDebug") == "true") {
+                isMinifyEnabled = true
+                isShrinkResources = true
+                proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-debug-checks.pro")
+            }
         }
     }
 
