@@ -60,6 +60,8 @@ class OfflineMapActivity : Activity() {
         val width = minOf(dp(380), resources.displayMetrics.widthPixels - dp(120))
         stage.addView(panel.view, FrameLayout.LayoutParams(width, WRAP, Gravity.TOP or Gravity.START).apply { setMargins(dp(12), dp(12), 0, 0) })
         panel.size(width)
+        // Opened from the Home widget's "Where to?": go straight to destination search.
+        if (intent.getBooleanExtra(EXTRA_SEARCH, false) && !ProfileStore.preferences(this).getBoolean(Keys.OFFLINE_NAV_ACTIVE, false)) panel.search()
         card.onLocation = panel::update
         card.onLongPress = { lat, lon ->
             ThemedDialogs.Builder(this).setTitle("Drive here?").setMessage("%.5f, %.5f".format(java.util.Locale.US, lat, lon))
@@ -83,5 +85,10 @@ class OfflineMapActivity : Activity() {
         card.onLongPress = null
         guidance?.close()
         super.onDestroy()
+    }
+
+    companion object {
+        /** Boolean extra: open destination search as soon as the navigation pack is ready. */
+        const val EXTRA_SEARCH = "app.flare.auto.extra.SEARCH"
     }
 }

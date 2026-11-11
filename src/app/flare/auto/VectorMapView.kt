@@ -38,6 +38,8 @@ internal class VectorMapView(
     private val bbox: DoubleArray,
     private val start: LatLng,
     private val startZoom: Double,
+    /** False for the Home preview: no pan, zoom, rotate or tilt gestures. */
+    private val interactive: Boolean,
     private val onFailed: (String) -> Unit
 ) : FrameLayout(context) {
     private val density = resources.displayMetrics.density
@@ -72,6 +74,7 @@ internal class VectorMapView(
         m.uiSettings.isAttributionEnabled = false
         m.uiSettings.isLogoEnabled = false
         m.uiSettings.isCompassEnabled = false
+        if (!interactive) m.uiSettings.setAllGesturesEnabled(false)
         m.setMinZoomPreference(8.0)
         m.setMaxZoomPreference(19.5)
         m.setLatLngBoundsForCameraTarget(LatLngBounds.from(bbox[2], bbox[3], bbox[0], bbox[1]))

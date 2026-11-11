@@ -26,7 +26,7 @@ tag `baseline-1.2.0-r2` / `work/FlareAuto-v1.2.0-r2.apk`.
 
 | What | Where |
 |---|---|
-| APK (release, signed with the usual key) | `work/FlareAuto-v1.2.0-maplibre.apk`, 1.2.0 / versionCode 4, SHA-256 `506ce04e…ff49b97c`, 35.1 MB |
+| APK (release, signed with the usual key) | `work/FlareAuto-v1.2.0-maplibre-r2.apk` (Home widget preview, below; SHA-256 `af3c9671…e8993822`, 35.4 MB). First 3D build, kept: `work/FlareAuto-v1.2.0-maplibre.apk`, 1.2.0 / versionCode 4, SHA-256 `506ce04e…ff49b97c`, 35.1 MB |
 | Navigation pack r3 | `work/flare-lahore-tools/dist/lahore/` (85.0 MB; `vector/` is 13.4 MB) |
 | Pack build | `python -I tools/pipeline.py` in flare-lahore-tools (stage `vector`; see its README) |
 
@@ -82,3 +82,21 @@ build without x86_64 would be about 21 MB.
 4. Readability in sunlight. The style is night-only, regardless of the launcher's light theme.
 5. Memory over a long drive (no growth) and that Home stays responsive.
 6. Spoken directions over the 3D map (unchanged code, but still untested on the car).
+
+## Home map widget (maplibre-r2)
+
+The Home map card is a read-only preview, like a CarPlay map tile:
+
+* it shows the live map, position, heading-up or north-up following, and while navigating the active route and
+  the live direction banner (the same panel as the full map, so distance, instruction and ETA match);
+* map gestures are off and the card takes every touch, so panning a map can't fight the Home pager (horizontal
+  drags still change Home pages);
+* a tap anywhere opens the full interactive map; the **Where to?** pill (shown when no destination is set) opens
+  it with destination search already open;
+* on the full map the idle panel reads **Where to?** with a search icon;
+* the route is shared in memory between the widget and the full map, so going back and forth does not recalculate
+  it. A widget opened after a restart calculates it once from GPS, like the full map does.
+
+Tested in BlueStacks (debug and release): no panning, the pill opens search, picking Liberty Market gives a
+route on the full map and on the widget with the banner counting down, a tap opens the full map with navigation
+continuing, stop returns the widget to "Where to?".

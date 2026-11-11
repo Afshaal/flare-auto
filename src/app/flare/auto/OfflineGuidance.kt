@@ -32,8 +32,18 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private var pendingSpeech:String?=null
     private var searchDialog:android.app.Dialog?=null
     private val etaFormat=java.text.SimpleDateFormat(if(p.getBoolean(Keys.CLOCK24,false)) "HH:mm" else "h:mm a",Locale.getDefault())
-    private val title:TextView=ui.text("Search destination",16,ui.t.textPrimary).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
-    private val idleDetail="${pack.region} · offline driving"
+    private val title:TextView=ui.text(IDLE_TITLE,16,ui.t.textPrimary).apply {
+        maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END;compoundDrawablePadding=ui.dp(10)
+        // The magnifier marks the panel as the search entry whenever no destination is set.
+        val glyph=SearchGlyph(ui.t.textPrimary).apply { setBounds(0,0,ui.dp(20),ui.dp(20)) }
+        fun icon() { setCompoundDrawablesRelative(if(text.toString()==IDLE_TITLE) glyph else null,null,null,null) }
+        icon();addTextChangedListener(object:android.text.TextWatcher {
+            override fun afterTextChanged(e:android.text.Editable?)=icon()
+            override fun beforeTextChanged(t:CharSequence?,a:Int,b:Int,c:Int)=Unit
+            override fun onTextChanged(t:CharSequence?,a:Int,b:Int,c:Int)=Unit
+        })
+    }
+    private val idleDetail="Search places or streets · ${pack.region} offline"
     private val detail:TextView=ui.text(idleDetail,12,ui.t.textSecondary).apply { maxLines=2 }
     val view:LinearLayout=ui.column().apply {
         setPadding(ui.dp(12),ui.dp(8),ui.dp(12),ui.dp(8));background=GlassDrawable(ui.t.card,ui.dp(12).toFloat(),ui.t.cardBorder)
@@ -50,7 +60,12 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     init {
         if(p.getBoolean(Keys.OFFLINE_NAV_ACTIVE,false)) {
             val lat=p.getString(Keys.OFFLINE_NAV_LAT,"")?.toDoubleOrNull();val lon=p.getString(Keys.OFFLINE_NAV_LON,"")?.toDoubleOrNull()
-            if(lat!=null && lon!=null && pack.covers(lat,lon)) { target=OfflineDestinationPicker.Place(p.getString(Keys.OFFLINE_NAV_NAME,"Destination") ?: "Destination","saved",lat,lon);title.text="Waiting for GPS";detail.text=target?.name }
+            if(lat!=null && lon!=null && pack.covers(lat,lon)) {
+                target=OfflineDestinationPicker.Place(p.getString(Keys.OFFLINE_NAV_NAME,"Destination") ?: "Destination","saved",lat,lon);title.text="Waiting for GPS";detail.text=target?.name
+                // Same destination as the route shown elsewhere in this process (full map <-> Home widget): reuse it.
+                val cached=cachedRoute
+                if(cached!=null && cachedKey==key(lat,lon)) { route=cached;paintRoute(cached);title.text="Continue towards ${target?.name}";detail.text=summary(cached.distance,cached.millis) }
+            }
         }
     }
     fun size(width:Int) { view.layoutParams?.width=width;title.maxWidth=width-ui.dp(24);detail.maxWidth=width-ui.dp(24) }
@@ -74,6 +89,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             calculating=false
             result.fold({ path->
                 route=path;segment=0;spoken=-1;offRoute=0;paintRoute(path)
+                if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(dest.lat,dest.lon) }
                 p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,!asPreview).putString(Keys.OFFLINE_NAV_LAT,dest.lat.toString()).putString(Keys.OFFLINE_NAV_LON,dest.lon.toString()).putString(Keys.OFFLINE_NAV_NAME,dest.name).apply()
                 title.text=if(asPreview) "Route preview · ${dest.name}" else "Continue towards ${dest.name}"
                 detail.text=summary(path.distance,path.millis)
@@ -106,7 +122,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         offRoute=0
         val remaining=(path.cumulative.last()-position.along).coerceAtLeast(0.0)
         if(remaining<35 && NavGeometry.distance(fix.latitude,fix.longitude,path.points[path.points.size-2],path.points.last())<60) {
-            title.text="You have arrived";detail.text=target?.name;speak("You have arrived near your destination");p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();preview=true;return
+            title.text="You have arrived";detail.text=target?.name;speak("You have arrived near your destination");p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();preview=true;cachedRoute=null;cachedKey=null;return
         }
         val next=path.steps.indexOfFirst { it.at>position.along+8 }.let { if(it<0) path.steps.lastIndex else it }
         val step=path.steps.getOrNull(next) ?: return
@@ -126,7 +142,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         }
     }
     private fun speak(text:String) { if(p.getBoolean(Keys.OFFLINE_NAV_VOICE,true)) { if(!voiceReady) pendingSpeech=text;initVoice();if(voiceReady) voice?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"flare-navigation") } }
-    fun stopRoute() { engine.close();route=null;target=null;calculating=false;p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();paintRoute(null);voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null;title.text="Search destination";detail.text=idleDetail }
+    fun stopRoute() { cachedRoute=null;cachedKey=null;engine.close();route=null;target=null;calculating=false;p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();paintRoute(null);voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null;title.text=IDLE_TITLE;detail.text=idleDetail }
     fun close() { closed=true;searchDialog?.dismiss();searchDialog=null;pendingSpeech=null;engine.close();voice?.stop();voice?.shutdown();voice=null;voiceReady=false }
     private fun summary(metres:Double,millis:Long):String {
         val minutes=maxOf(1,(millis/60000).toInt());val eta=etaFormat.format(java.util.Date(System.currentTimeMillis()+millis))
@@ -134,6 +150,11 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     }
     private fun distance(m:Double)=if(m<1000) "${(m/10).toInt()*10} m" else "%.1f km".format(Locale.getDefault(),m/1000)
     companion object {
+        const val IDLE_TITLE="Where to?"
+        /** Last active route of this process, so the Home widget and the full map share it without recomputing. */
+        private var cachedRoute:NavRoute?=null
+        private var cachedKey:String?=null
+        private fun key(lat:Double,lon:Double)="$lat,$lon"
         /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */
         private val NON_LATIN=Regex("[\\u0600-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF]")
         /** Instruction for the voice: drops an Urdu-only street name ("turn left onto <name>" -> "turn left"). */

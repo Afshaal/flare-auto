@@ -119,7 +119,7 @@ internal class HomeCards(
             "media", "media_wide", "media_compact" -> buildMediaCard(content, params, compact || card != "media", card == "media_compact")
             "weather", "weather_solar" -> buildWeatherCard(content, params, card == "weather_solar")
             "apps" -> buildAppCard(content, params)
-            "offline_map" -> OfflineMapCard(activity, context, sampleData).also { maps.add(it); content.addView(it, params) }
+            "offline_map" -> OfflineMapCard(activity, context, sampleData, preview = true).also { maps.add(it); content.addView(it, params) }
             else -> if (HostedWidgets.id(card) != null) content.addView(HostedWidgets.view(activity, context, card, preview), params)
         }
         if (preview) environments.forEach { it.updateSolar() }
