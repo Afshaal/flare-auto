@@ -16,7 +16,7 @@ internal object OfflineDestinationPicker {
         val body=ui.column();val input=EditText(a).apply { setSingleLine();hint="Place, street or latitude, longitude";setTextColor(ui.t.textPrimary) }
         body.addView(input)
         val status=ui.text("Search Lahore offline",12,ui.t.textSecondary);body.addView(status)
-        val list=ListView(a).apply { divider=null };body.addView(list,LinearLayout.LayoutParams(-1,minOf(ui.dp(190),(a.resources.displayMetrics.heightPixels*.32f).toInt())))
+        val list=ListView(a).apply { divider=null };body.addView(list,LinearLayout.LayoutParams(MATCH,minOf(ui.dp(190),(a.resources.displayMetrics.heightPixels*.32f).toInt())))
         var places=emptyList<Place>()
         val dialog=ThemedDialogs.Builder(a).setTitle("Offline destination").setView(body).setNegativeButton("Close",null).create()
         list.setOnItemClickListener { _,_,i,_->places.getOrNull(i)?.let { dialog.dismiss();chosen(it) } }

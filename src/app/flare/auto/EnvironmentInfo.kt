@@ -1,12 +1,12 @@
 package app.flare.auto
 
+import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
 import android.location.LocationManager
 import android.widget.TextView
 import java.util.Calendar
-import java.util.Locale
 import java.util.TimeZone
 
 internal class EnvironmentInfo(
@@ -36,23 +36,17 @@ internal class EnvironmentInfo(
     fun stop() { forecast.stop() }
 
     private fun locate(): Boolean {
-        if (preferences.getBoolean("solar_manual", false)) {
-            try {
-                val latitude = preferences.getString("solar_lat", "")!!.toDouble()
-                val longitude = preferences.getString("solar_lon", "")!!.toDouble()
-                if (latitude.isFinite() && longitude.isFinite() &&
-                    latitude in -90.0..90.0 && longitude in -180.0..180.0
-                ) {
-                    lat = latitude
-                    lon = longitude
-                    return true
-                }
-            } catch (_: RuntimeException) {
+        if (preferences.getBoolean(Keys.SOLAR_MANUAL, false)) {
+            val latitude = preferences.getString(Keys.SOLAR_LAT, "")?.toDoubleOrNull()
+            val longitude = preferences.getString(Keys.SOLAR_LON, "")?.toDoubleOrNull()
+            if (latitude != null && longitude != null && latitude.isFinite() && longitude.isFinite() &&
+                latitude in -90.0..90.0 && longitude in -180.0..180.0
+            ) {
+                lat = latitude
+                lon = longitude
+                return true
             }
-        } else if (
-            context.checkSelfPermission("android.permission.ACCESS_FINE_LOCATION") == PackageManager.PERMISSION_GRANTED ||
-            context.checkSelfPermission("android.permission.ACCESS_COARSE_LOCATION") == PackageManager.PERMISSION_GRANTED
-        ) {
+        } else if (context.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
             val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             if (locationManager != null) {
                 for (provider in arrayOf(
@@ -104,15 +98,15 @@ internal class EnvironmentInfo(
         }
         if (lastMinute == minute) return
         lastMinute = minute
-        if (displayMode != "sun" && preferences.getBoolean("weather_enabled", false) && lat.isFinite() && lon.isFinite()) {
+        if (displayMode != "sun" && preferences.getBoolean(Keys.WEATHER_ENABLED, false) && lat.isFinite() && lon.isFinite()) {
             forecast.refresh(lat, lon)
             val weather = forecast.value(System.currentTimeMillis(), lat, lon)
             if (weather != null) {
-                val fahrenheit = preferences.getBoolean("weather_fahrenheit", false)
+                val fahrenheit = preferences.getBoolean(Keys.WEATHER_FAHRENHEIT, false)
                 val value = if (fahrenheit) weather.temperature * 9 / 5 + 32 else weather.temperature
                 val temperature = kotlin.math.round(value).toInt()
                 sun.setTextColor(ThemeTokens.get(context).textPrimary)
-                sun.textSize = 16f * preferences.getInt("text", 100) / 100f
+                sun.textSize = 16f * preferences.getInt(Keys.TEXT, 100) / 100f
                 sun.text = "$temperature\u00b0"
                 icon.setDaytime(!night())
                 sun.contentDescription = "Forecast ${sun.text}; downloaded " + downloadedFormat.apply { timeZone = zone }.format(java.util.Date(weather.fetchedAt))
@@ -122,7 +116,7 @@ internal class EnvironmentInfo(
         }
         icon.setWeather(null)
         sun.setTextColor(ThemeTokens.get(context).textSecondary)
-        sun.textSize = 11f * preferences.getInt("text", 100) / 100f
+        sun.textSize = 11f * preferences.getInt(Keys.TEXT, 100) / 100f
         if (lat.isNaN()) {
             sun.text = "--:--"
             sun.contentDescription = "Sunrise and sunset unavailable; set a location"
@@ -140,14 +134,7 @@ internal class EnvironmentInfo(
         icon.setDaytime(state.day)
     }
 
-    fun format(minutes: Int): String {
-        if (minutes < 0) return "--:--"
-        val hour = minutes / 60
-        if (preferences.getBoolean("clock24", false)) {
-            return String.format(Locale.US, "%02d:%02d", hour, minutes % 60)
-        }
-        return String.format(Locale.US, "%02d:%02d %s", (hour + 11) % 12 + 1, minutes % 60, if (hour < 12) "AM" else "PM")
-    }
+    fun format(minutes: Int): String = formatMinutes(minutes, preferences.clock24)
 
     fun night(): Boolean {
         if (sunrise < 0 || sunset < 0) return false
@@ -155,4 +142,13 @@ internal class EnvironmentInfo(
         val minute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE)
         return minute >= sunset || minute < sunrise
     }
+}
+
+/** "HH:mm", or "hh:mm AM/PM" when [clock24] is off; "--:--" for a missing time (minutes < 0). */
+internal fun formatMinutes(minutes: Int, clock24: Boolean): String {
+    if (minutes < 0) return "--:--"
+    val hour = minutes / 60
+    val minute = minutes % 60
+    fun two(value: Int) = if (value < 10) "0$value" else value.toString()
+    return if (clock24) "${two(hour)}:${two(minute)}" else "${two((hour + 11) % 12 + 1)}:${two(minute)} ${if (hour < 12) "AM" else "PM"}"
 }

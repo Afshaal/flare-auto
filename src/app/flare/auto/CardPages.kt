@@ -13,13 +13,13 @@ internal class CardPages(private val activity:Activity,private val page:Int,priv
     private var incoming:View?=null
     private var direction=0
     private var settling=false
-    init { clipChildren=true; old=factory(page,this); addView(old,LayoutParams(-1,-1)) }
+    init { clipChildren=true; old=factory(page,this); addView(old,LayoutParams(MATCH,MATCH)) }
     fun drag(dx:Float) {
         if(settling || width==0) return
         val dir=if(dx<0) 1 else -1
         if(incoming==null) {
             if(page+dir !in first..last || abs(dx)<resources.displayMetrics.density*12) return
-            direction=dir; incoming=factory(page+dir,this).also { addView(it,LayoutParams(-1,-1)) }
+            direction=dir; incoming=factory(page+dir,this).also { addView(it,LayoutParams(MATCH,MATCH)) }
         }
         val distance=(dx*direction).coerceIn(-width.toFloat(),0f)*direction
         val fraction=(abs(distance)/width).coerceIn(0f,1f)

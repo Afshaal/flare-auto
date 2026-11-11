@@ -18,8 +18,7 @@ class LimitChecksActivity : Activity() {
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         if (intent.getBooleanExtra("editor", false)) {
-            check(HomeActivity.instance.get() == null)
-            startActivity(Intent(this, CustomizeActivity::class.java)); finish(); return
+            startActivity(Intent(this, GridEditorActivity::class.java)); finish(); return
         }
         val results = ArrayList<String>()
         val output = TextView(this).apply { textSize = 14f }; setContentView(output)

@@ -8,7 +8,7 @@ import android.view.View
 import kotlin.math.min
 
 internal class SolarIcon(context: Context, private val color: Int) : View(context) {
-    private val paint = Paint(3).apply {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         this.color = this@SolarIcon.color
         style = Paint.Style.STROKE
         strokeWidth = 1.3f

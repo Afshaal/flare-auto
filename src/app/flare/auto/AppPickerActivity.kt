@@ -3,14 +3,10 @@ package app.flare.auto
 import android.app.Activity
 import android.content.ComponentName
 import android.content.Intent
-import android.content.pm.ResolveInfo
-import android.graphics.drawable.Drawable
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.text.Editable
 import android.text.TextWatcher
-import android.util.LruCache
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
@@ -21,30 +17,28 @@ import android.widget.GridView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
-import java.util.ArrayList
-import java.util.Collections
 import java.util.Locale
-import java.util.concurrent.Executors
 
+/**
+ * Picks an installed app and returns its component as [TARGET]. With role "banners" it instead toggles which
+ * apps may show screensaver notification banners.
+ */
 class AppPickerActivity : Activity() {
     private lateinit var ui: UiKit
     private var role = ""
     private var current = ""
-    private lateinit var grid: GridView
     private val all = ArrayList<Entry>()
     private val visible = ArrayList<Entry>()
-    private val icons = LruCache<String, Drawable>(48)
-    private val pendingIcons = HashSet<String>()
-    private val main = Handler(Looper.getMainLooper())
-    private val iconLoader = Executors.newSingleThreadExecutor()
     private lateinit var adapter: Adapter
 
-    class Entry(@JvmField val label: String, @JvmField val target: String)
+    class Entry(val label: String, val target: String)
+
+    private val banners get() = role == "banners"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ThemeTokens.get(this).background))
-        window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
+        window.setBackgroundDrawable(ColorDrawable(ThemeTokens.get(this).background))
+        window.immersive()
         window.setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN)
         ui = UiKit(this)
         role = intent.getStringExtra(ROLE).orEmpty()
@@ -54,7 +48,7 @@ class AppPickerActivity : Activity() {
             setBackgroundColor(ui.t.background)
             isFocusableInTouchMode = true
         }
-        root.addView(ui.header(if (role == "banners") "Notification apps · tap to toggle" else "Choose app"), LinearLayout.LayoutParams(-1, ui.dp(56)))
+        root.addView(ui.header(if (banners) "Notification apps · tap to toggle" else "Choose app"), LinearLayout.LayoutParams(MATCH, ui.dp(56)))
         val search = EditText(this).apply {
             setSingleLine()
             hint = "Search apps"
@@ -64,78 +58,51 @@ class AppPickerActivity : Activity() {
             minHeight = ui.dp(56)
         }
         root.addView(search)
-        grid = GridView(this).apply {
+        val grid = GridView(this).apply {
             numColumns = 5
             verticalSpacing = ui.dp(8)
             horizontalSpacing = ui.dp(8)
             stretchMode = GridView.STRETCH_COLUMN_WIDTH
         }
-        root.addView(grid, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(grid, LinearLayout.LayoutParams(MATCH, 0, 1f))
         setContentView(root)
         root.requestFocus()
         adapter = Adapter()
         grid.adapter = adapter
         grid.setOnItemClickListener { _, _, position, _ ->
-            if (role == "banners") {
+            if (banners) {
                 val pkg = ComponentName.unflattenFromString(visible[position].target)?.packageName ?: return@setOnItemClickListener
                 val prefs = ProfileStore.preferences(this)
-                val allowed = prefs.getStringSet("saver_banner_apps", emptySet())!!.toMutableSet()
+                val allowed = HashSet(prefs.getStringSet(Keys.SAVER_BANNER_APPS, emptySet()).orEmpty())
                 if (!allowed.add(pkg)) allowed.remove(pkg)
-                prefs.edit().putStringSet("saver_banner_apps", allowed).apply()
+                prefs.edit().putStringSet(Keys.SAVER_BANNER_APPS, allowed).apply()
                 adapter.notifyDataSetChanged()
                 return@setOnItemClickListener
             }
-            val data = Intent().putExtra(ROLE, role).putExtra(TARGET, visible[position].target)
-            setResult(RESULT_OK, data)
+            setResult(RESULT_OK, Intent().putExtra(ROLE, role).putExtra(TARGET, visible[position].target))
             finish()
         }
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(text: CharSequence, start: Int, count: Int, after: Int) = Unit
-            override fun onTextChanged(text: CharSequence, start: Int, before: Int, count: Int) {
-                filter(text.toString())
-            }
+            override fun onTextChanged(text: CharSequence, start: Int, before: Int, count: Int) = filter(text.toString())
             override fun afterTextChanged(editable: Editable) = Unit
         })
 
-        Thread {
-            val packageManager = packageManager
-            val apps = packageManager.queryIntentActivities(
-                Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER),
-                0
-            )
-            Collections.sort(apps, ResolveInfo.DisplayNameComparator(packageManager))
+        Background.load(this, {
             val result = ArrayList<Entry>()
-            if (role != "banners") result.add(Entry(if (role == "startup") "Do not open an app" else "Use launcher default", ""))
-            for (resolveInfo in apps) {
-                val target = ComponentName(
-                    resolveInfo.activityInfo.packageName,
-                    resolveInfo.activityInfo.name
-                ).flattenToString()
-                result.add(Entry(resolveInfo.loadLabel(packageManager).toString(), target))
-            }
-            main.post {
-                if (isFinishing || isDestroyed) return@post
-                all.clear()
-                all.addAll(result)
-                filter(search.text.toString())
-            }
-        }.start()
-    }
-
-    override fun onDestroy() {
-        iconLoader.shutdownNow()
-        main.removeCallbacksAndMessages(null)
-        super.onDestroy()
+            if (!banners) result.add(Entry(if (role == "startup") "Do not open an app" else "Use launcher default", ""))
+            AppCatalog.apps(this).mapTo(result) { Entry(it.label, it.target) }
+        }) { result ->
+            all.clear()
+            all.addAll(result)
+            filter(search.text.toString())
+        }
     }
 
     private fun filter(query: String) {
         visible.clear()
         val term = query.lowercase(Locale.getDefault())
-        for (entry in all) {
-            if (entry.target.isEmpty() || entry.label.lowercase(Locale.getDefault()).contains(term)) {
-                visible.add(entry)
-            }
-        }
+        all.filterTo(visible) { it.target.isEmpty() || it.label.lowercase(Locale.getDefault()).contains(term) }
         adapter.notifyDataSetChanged()
     }
 
@@ -145,46 +112,31 @@ class AppPickerActivity : Activity() {
         override fun getItemId(position: Int) = position.toLong()
 
         override fun getView(position: Int, recycled: View?, parent: ViewGroup): View {
-            val cell = recycled as? LinearLayout ?: ui.column().apply {
-                gravity = Gravity.CENTER
-                minimumHeight = ui.dp(96)
-                val image = ImageView(this@AppPickerActivity).apply { id = android.R.id.icon }
-                addView(image, LinearLayout.LayoutParams(ui.dp(42), ui.dp(42)))
-                val title = ui.text("", 14, ui.t.textPrimary).apply {
-                    id = android.R.id.text1
-                    gravity = Gravity.CENTER
-                    maxLines = 2
-                }
-                addView(title, LinearLayout.LayoutParams(-1, -2))
-            }
+            val cell = recycled as? Cell ?: Cell()
             val entry = visible[position]
-            val image = cell.findViewById<ImageView>(android.R.id.icon)
-            image.tag = entry.target
-            val cached = synchronized(icons) { icons.get(entry.target) }
-            image.setImageDrawable(cached)
-            if (cached == null && entry.target.isNotEmpty() && pendingIcons.add(entry.target)) {
-                val target = entry.target
-                iconLoader.execute {
-                    try {
-                        val drawable = packageManager.getActivityIcon(ComponentName.unflattenFromString(target)!!)
-                        synchronized(icons) { icons.put(target, drawable) }
-                        main.post {
-                            pendingIcons.remove(target)
-                            if (!isFinishing && !isDestroyed) {
-                                for (index in 0 until grid.childCount) {
-                                    val visibleIcon = grid.getChildAt(index).findViewById<ImageView>(android.R.id.icon)
-                                    if (visibleIcon.tag == target) visibleIcon.setImageDrawable(drawable)
-                                }
-                            }
-                        }
-                    } catch (_: Exception) {
-                        main.post { pendingIcons.remove(target) }
-                    }
-                }
-            }
-            cell.findViewById<TextView>(android.R.id.text1).text =
-                entry.label + if (if (role == "banners") ProfileStore.preferences(this@AppPickerActivity).getStringSet("saver_banner_apps", emptySet())!!.contains(ComponentName.unflattenFromString(entry.target)?.packageName) else entry.target == current) " ✓" else ""
+            cell.icon.setImageDrawable(if (entry.target.isEmpty()) null else AppIcons.get(this@AppPickerActivity, entry.target))
+            val chosen = if (banners) {
+                ProfileStore.preferences(this@AppPickerActivity).getStringSet(Keys.SAVER_BANNER_APPS, emptySet()).orEmpty()
+                    .contains(ComponentName.unflattenFromString(entry.target)?.packageName)
+            } else entry.target == current
+            cell.title.text = if (chosen) entry.label + " ✓" else entry.label
             return cell
+        }
+    }
+
+    private inner class Cell : LinearLayout(this@AppPickerActivity) {
+        val icon = ImageView(context)
+        val title: TextView = ui.text("", 14, ui.t.textPrimary).apply {
+            gravity = Gravity.CENTER
+            maxLines = 2
+        }
+
+        init {
+            orientation = VERTICAL
+            gravity = Gravity.CENTER
+            minimumHeight = ui.dp(96)
+            addView(icon, LayoutParams(ui.dp(42), ui.dp(42)))
+            addView(title, LayoutParams(MATCH, WRAP))
         }
     }
 

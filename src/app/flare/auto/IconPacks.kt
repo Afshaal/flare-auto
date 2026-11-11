@@ -15,7 +15,7 @@ import java.util.HashMap
 import java.util.LinkedHashMap
 
 internal object IconPacks {
-    const val KEY = "icon_pack"
+    const val KEY = Keys.ICON_PACK
 
     @JvmField
     val ACTIONS = arrayOf(

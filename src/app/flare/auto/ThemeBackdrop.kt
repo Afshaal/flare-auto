@@ -10,7 +10,7 @@ import android.graphics.drawable.Drawable
 
 internal class ThemeBackdrop(@JvmField val theme: ThemeTokens) : Drawable() {
     private val line = Path()
-    private val paint = Paint(3)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
 
     override fun onBoundsChange(bounds: Rect) {
         val width = bounds.width().toFloat()
@@ -39,5 +39,6 @@ internal class ThemeBackdrop(@JvmField val theme: ThemeTokens) : Drawable() {
 
     override fun setAlpha(alpha: Int) = Unit
     override fun setColorFilter(colorFilter: android.graphics.ColorFilter?) = Unit
+    @Deprecated("Deprecated in Java")
     override fun getOpacity() = PixelFormat.OPAQUE
 }

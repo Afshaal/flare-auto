@@ -7,17 +7,14 @@ import android.graphics.Path
 import android.view.View
 import kotlin.math.min
 
-internal class CivicBadge(context: Context, rs: Boolean, private val badgeColor: Int = ThemeTokens.get(context).accent) : View(context) {
-    private val paint = Paint(3)
-    private val theme = ThemeTokens.get(context)
+/** The stylised trim badge drawn when the badge text is [Defaults.TRIM_BADGE_GLYPH]; outlined in [badgeColor]. */
+internal class TrimBadge(context: Context, private val badgeColor: Int) : View(context) {
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+    private val fill = ThemeTokens.get(context).background
     private val letters = Path()
 
     init {
-        contentDescription = "RS"
-    }
-
-    init {
-        letters.rewind()
+        contentDescription = Defaults.TRIM_BADGE_GLYPH
         letters.moveTo(6f, 4f)
         letters.lineTo(19f, 4f)
         letters.cubicTo(24f, 4f, 25f, 7f, 23f, 11f)
@@ -59,7 +56,7 @@ internal class CivicBadge(context: Context, rs: Boolean, private val badgeColor:
         canvas.translate((width - 46 * scale) / 2, (height - 28 * scale) / 2)
         canvas.scale(scale, scale)
         paint.style = Paint.Style.FILL
-        paint.color = theme.background
+        paint.color = fill
         canvas.drawPath(letters, paint)
         paint.style = Paint.Style.STROKE
         paint.strokeJoin = Paint.Join.ROUND

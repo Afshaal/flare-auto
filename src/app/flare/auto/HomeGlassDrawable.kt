@@ -62,5 +62,7 @@ internal class HomeGlassDrawable(color: Int, private val border: Int, private va
         invalidateSelf()
     }
 
+    @Deprecated("Deprecated in Java")
+
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 }

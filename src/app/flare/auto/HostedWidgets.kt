@@ -31,7 +31,9 @@ internal object HostedWidgets {
                     addOnLayoutChangeListener { _,l,t,r,b,ol,ot,or,ob->
                         if(r-l!=or-ol || b-t!=ob-ot) {
                             val d=resources.displayMetrics.density
-                            updateAppWidgetSize(null,((r-l)/d).toInt(),((b-t)/d).toInt(),((r-l)/d).toInt(),((b-t)/d).toInt())
+                            val w=((r-l)/d).toInt(); val h=((b-t)/d).toInt()
+                            if(android.os.Build.VERSION.SDK_INT>=31) updateAppWidgetSize(android.os.Bundle(),listOf(android.util.SizeF(w.toFloat(),h.toFloat())))
+                            else @Suppress("DEPRECATION") updateAppWidgetSize(null,w,h,w,h)
                         }
                     }
                 }
@@ -42,9 +44,9 @@ internal object HostedWidgets {
             orientation=LinearLayout.VERTICAL;gravity=Gravity.CENTER
             background=GlassDrawable(theme.card,12*resources.displayMetrics.density,theme.cardBorder)
             if(info!=null) {
-                addView(ImageView(c).apply { setImageDrawable(info.loadPreviewImage(c,0) ?: info.loadIcon(c,0));scaleType=ImageView.ScaleType.FIT_CENTER },LinearLayout.LayoutParams(-1,0,1f))
+                addView(ImageView(c).apply { setImageDrawable(info.loadPreviewImage(c,0) ?: info.loadIcon(c,0));scaleType=ImageView.ScaleType.FIT_CENTER },LinearLayout.LayoutParams(MATCH,0,1f))
             }
-            addView(TextView(c).apply { text=info?.loadLabel(c.packageManager) ?: "Widget unavailable";setTextColor(theme.textPrimary);textSize=14f;gravity=Gravity.CENTER },LinearLayout.LayoutParams(-1,-2))
+            addView(TextView(c).apply { text=info?.loadLabel(c.packageManager) ?: "Widget unavailable";setTextColor(theme.textPrimary);textSize=14f;gravity=Gravity.CENTER },LinearLayout.LayoutParams(MATCH,WRAP))
         }
     }
 }

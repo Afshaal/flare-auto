@@ -14,7 +14,6 @@ class OptimizationMediaActivity : Activity() {
         super.onCreate(state)
         if (session == null) {
             session = MediaSession(applicationContext, "Optimization media test").apply {
-                setFlags(MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS)
                 setCallback(object : MediaSession.Callback() {
                     override fun onPlay() { playback(PlaybackState.STATE_PLAYING) }
                     override fun onPause() { playback(PlaybackState.STATE_PAUSED) }

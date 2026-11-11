@@ -2,7 +2,6 @@ package app.flare.auto
 import android.app.Activity
 import android.app.Notification
 import android.app.PendingIntent
-import android.content.Context
 import android.os.Handler
 import android.os.Looper
 import android.service.notification.StatusBarNotification
@@ -45,13 +44,13 @@ internal class SaverBanners(private val activity:Activity,private val root:Frame
     private var banner:View?=null
     private val expire=Runnable { dismiss() }
     private fun dp(n:Int)=(n*activity.resources.displayMetrics.density+.5f).toInt()
-    fun start() { if(prefs.getBoolean("saver_banners",false)) BannerNotifications.listen(this) }
+    fun start() { if(prefs.getBoolean(Keys.SAVER_BANNERS,false)) BannerNotifications.listen(this) }
     fun stop() {
         BannerNotifications.stop(this); handler.removeCallbacksAndMessages(null); queue.clear()
         cards.keys.toList().forEach { it.animate().cancel();root.removeView(it) };cards.clear();updateSlots();banner=null;shown=null
     }
     override fun posted(entry:BannerNotifications.Entry) {
-        if(entry.pkg==activity.packageName || !prefs.getStringSet("saver_banner_apps",emptySet())!!.contains(entry.pkg)) return
+        if(entry.pkg==activity.packageName || !prefs.getStringSet(Keys.SAVER_BANNER_APPS,emptySet())!!.contains(entry.pkg)) return
         if(shown?.key==entry.key) show(entry) else if(shown==null) show(entry) else queue.offer(entry)
     }
     override fun removed(key:String) { queue.remove(key); if(shown?.key==key) dismiss() }
@@ -68,7 +67,7 @@ internal class SaverBanners(private val activity:Activity,private val root:Frame
     private fun show(entry:BannerNotifications.Entry) {
         handler.removeCallbacks(expire); banner?.animate()?.cancel(); banner?.let { root.removeView(it);cards.remove(it) }
         shown=entry
-        val scale=prefs.getInt("saver_banner_size",100).coerceIn(85,120)/100f
+        val scale=prefs.getInt(Keys.SAVER_BANNER_SIZE,100).coerceIn(85,120)/100f
         val card=LinearLayout(activity).apply {
             gravity=Gravity.CENTER_VERTICAL; setPadding(dp(14),dp(12),dp(14),dp(12))
             background=GlassDrawable(theme.card,dp(16).toFloat(),theme.cardBorder)
@@ -82,15 +81,15 @@ internal class SaverBanners(private val activity:Activity,private val root:Frame
             text=value; textSize=size*scale; setTextColor(color); maxLines=2; ellipsize=TextUtils.TruncateAt.END; includeFontPadding=false
         }
         labels.addView(label(appName,12f,theme.textSecondary))
-        val private=!entry.music && prefs.getBoolean("saver_banner_private",true)
+        val private=!entry.music && prefs.getBoolean(Keys.SAVER_BANNER_PRIVATE,true)
         labels.addView(label(if(private) "New notification" else entry.title,16f,theme.textPrimary))
         if(!private && entry.text.isNotEmpty()) labels.addView(label(entry.text,14f,theme.textSecondary))
-        card.addView(labels,LinearLayout.LayoutParams(0,-2,1f))
+        card.addView(labels,LinearLayout.LayoutParams(0,WRAP,1f))
         val width=minOf(dp((340*scale).toInt()),activity.resources.displayMetrics.widthPixels-dp(32))
-        val side=if(entry.music) "right" else prefs.getString("saver_banner_position","left")
+        val side=if(entry.music) "right" else prefs.getString(Keys.SAVER_BANNER_POSITION,"left")
         val left=side=="left" || (side=="alternate" && nextLeft)
         if(side=="alternate") nextLeft=!nextLeft
-        root.addView(card,FrameLayout.LayoutParams(width,-2,Gravity.TOP or if(left) Gravity.START else Gravity.END).apply { topMargin=dp(18); leftMargin=dp(18); rightMargin=dp(18) })
+        root.addView(card,FrameLayout.LayoutParams(width,WRAP,Gravity.TOP or if(left) Gravity.START else Gravity.END).apply { topMargin=dp(18); leftMargin=dp(18); rightMargin=dp(18) })
         cards[card]=left;updateSlots()
         card.setOnClickListener {
             try { entry.action?.send(); if(entry.action!=null) activity.finish() else dismiss() }
@@ -108,6 +107,6 @@ internal class SaverBanners(private val activity:Activity,private val root:Frame
             card.alpha=0f;card.translationX=(if(left) -1 else 1)*(width+dp(40)).toFloat()
             card.animate().alpha(1f).translationX(0f).setDuration(320).setInterpolator(android.view.animation.PathInterpolator(.2f,.8f,.2f,1f)).start()
         }
-        handler.postDelayed(expire,if(entry.music) 5000 else prefs.getInt("saver_banner_seconds",5).coerceIn(2,15)*1000L)
+        handler.postDelayed(expire,if(entry.music) 5000 else prefs.getInt(Keys.SAVER_BANNER_SECONDS,5).coerceIn(2,15)*1000L)
     }
 }

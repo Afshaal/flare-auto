@@ -75,9 +75,10 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
         }
         placement?.let { tile ->
             paint.color=(accent and 0x00ffffff) or 0x22000000
+            // Shade every free spot for the tile being placed (no allocation per cell: this runs every frame).
             for(y in 0..6-tile.h) for(x in 0..8-tile.w) {
-                val next=tile.copy(x=x,y=y)
-                if(tiles.filter { it!==placement }.none { it.overlaps(next) }) c.drawRect(width*x/8f,height*y/6f,width*(x+tile.w)/8f,height*(y+tile.h)/6f,paint)
+                val free=tiles.none { it!==tile && x<it.x+it.w && x+tile.w>it.x && y<it.y+it.h && y+tile.h>it.y }
+                if(free) c.drawRect(width*x/8f,height*y/6f,width*(x+tile.w)/8f,height*(y+tile.h)/6f,paint)
             }
         }
     }

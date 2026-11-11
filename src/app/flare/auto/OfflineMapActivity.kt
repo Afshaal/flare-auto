@@ -8,9 +8,9 @@ class OfflineMapActivity:Activity() {
     private lateinit var card:OfflineMapCard
     override fun onCreate(state:Bundle?) {
         super.onCreate(state);val ui=UiKit(this)
-        window.decorView.systemUiVisibility=UiFlags.IMMERSIVE;window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
+        window.immersive();window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
         val root=ui.column().apply { setBackgroundColor(ui.t.background) };root.addView(ui.header("Offline maps"))
-        card=OfflineMapCard(this,this);root.addView(card,LinearLayout.LayoutParams(-1,0,1f));setContentView(root)
+        card=OfflineMapCard(this,this);root.addView(card,LinearLayout.LayoutParams(MATCH,0,1f));setContentView(root)
     }
     override fun onResume() { super.onResume();card.start() }
     override fun onPause() { card.stop();super.onPause() }

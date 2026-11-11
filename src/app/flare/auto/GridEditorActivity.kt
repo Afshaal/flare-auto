@@ -38,10 +38,10 @@ class GridEditorActivity:Activity() {
         draft=EditorDraft(ProfileStore.preferences(this));state?.getBundle("settings")?.let { draft.restore(it) }
         imageToken=state?.getString("imageToken") ?: java.util.UUID.randomUUID().toString()
         images=java.io.File(cacheDir,"home_editor_"+imageToken).apply { mkdirs() }
-        previewContext=EditorContext(UiScale.wrap(this,"ui_scale_home"),draft,images)
+        previewContext=EditorContext(UiScale.wrap(this,Keys.UI_SCALE_HOME),draft,images)
         pages=DashboardPages.decode(state?.getString("draft")) ?: DashboardPages.initial(draft)
-        page=(state?.getInt("page") ?: draft.getInt("dashboard_default",0)).coerceIn(-1,pages.size)
-        defaultPage=(state?.getInt("default") ?: draft.getInt("dashboard_default",0)).coerceIn(0,pages.lastIndex)
+        page=(state?.getInt("page") ?: draft.getInt(Keys.DASHBOARD_DEFAULT,0)).coerceIn(-1,pages.size)
+        defaultPage=(state?.getInt("default") ?: draft.getInt(Keys.DASHBOARD_DEFAULT,0)).coerceIn(0,pages.lastIndex)
         pendingKey=state?.getString("pendingKey").orEmpty();pendingDock=state?.getInt("pendingDock",-1) ?: -1
         widgetReplacement=state?.getInt("widgetReplacement",-1) ?: -1
         state?.getIntArray("allocatedWidgets")?.let { allocatedWidgets.addAll(it.toList()) }
@@ -59,19 +59,19 @@ class GridEditorActivity:Activity() {
             gravity=Gravity.CENTER;minimumHeight=ui.dp(44)
             background=android.graphics.drawable.GradientDrawable().apply { setColor(ui.t.card);cornerRadius=ui.dp(14).toFloat();setStroke(ui.dp(1),ui.t.cardBorder) }
             setPadding(ui.dp(8),ui.dp(6),ui.dp(8),ui.dp(6));setOnClickListener { run() }
-        },LinearLayout.LayoutParams(0,-2,1f).apply { setMargins(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(4)) })
+        },LinearLayout.LayoutParams(0,WRAP,1f).apply { setMargins(ui.dp(4),ui.dp(4),ui.dp(4),ui.dp(4)) })
     }
     private fun clearSelection() {
         selected=-1;dockSelected=-1;activeBoard?.let { it.selection=-1;it.invalidate() };contextPanel()
     }
     private fun save() {
-        draft.edit().putString(DashboardPages.KEY,DashboardPages.encode(pages)).putInt("dashboard_default",defaultPage).apply()
-        val image=java.io.File(images,draft.getString("_editor_image","missing") ?: "missing")
-        if(image.isFile && draft.getInt("wallpaper_home_v2",-1)==WallpaperPack.HOME_NAMES.lastIndex) {
+        draft.edit().putString(DashboardPages.KEY,DashboardPages.encode(pages)).putInt(Keys.DASHBOARD_DEFAULT,defaultPage).apply()
+        val image=java.io.File(images,draft.getString(Keys.EDITOR_IMAGE,"missing") ?: "missing")
+        if(image.isFile && draft.getInt(Keys.WALLPAPER_HOME,-1)==WallpaperPack.CUSTOM_INDEX) {
             try { java.nio.file.Files.move(image.toPath(),CustomImages.file(this,"home").toPath(),java.nio.file.StandardCopyOption.REPLACE_EXISTING);CustomImages.cache.evictAll() }
             catch(_:Exception) { Toast.makeText(this,"Could not save the custom image",Toast.LENGTH_LONG).show();return }
         }
-        draft.edit().remove("_editor_image").apply()
+        draft.edit().remove(Keys.EDITOR_IMAGE).apply()
         val original=ProfileStore.preferences(this);val previous=HostedWidgets.ids(original.getString(DashboardPages.KEY,null))
         draft.save(original)
         (previous-HostedWidgets.ids(original.getString(DashboardPages.KEY,null))).forEach { HostedWidgets.delete(this,it) }
@@ -96,13 +96,13 @@ class GridEditorActivity:Activity() {
         if(::screen.isInitialized) screen.animate().cancel()
         deleteDragging=false
         ui=UiKit(this);ui.t=ThemeTokens.preview(draft)
-        window.decorView.systemUiVisibility=UiFlags.IMMERSIVE;window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
+        window.immersive();window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
         val root=ui.column().apply { setBackgroundColor(ui.t.background) }
         activeBoard=null
         val stage=FrameLayout(this)
-        root.addView(stage,LinearLayout.LayoutParams(-1,0,1f))
+        root.addView(stage,LinearLayout.LayoutParams(MATCH,0,1f))
         preview=PagePreview(this,{ page in pages.indices && placing==null },::dragPage).apply { setOnClickListener { clearSelection() } }
-        stage.addView(preview,FrameLayout.LayoutParams(-1,-1).apply { leftMargin=ui.dp(68);rightMargin=ui.dp(68) })
+        stage.addView(preview,FrameLayout.LayoutParams(MATCH,MATCH).apply { leftMargin=ui.dp(68);rightMargin=ui.dp(68) })
         screen=LinearLayout(previewContext).apply {
             orientation=LinearLayout.VERTICAL;background=WallpaperPack.home(previewContext,ui.t)
             outlineProvider=object:android.view.ViewOutlineProvider() {
@@ -122,10 +122,10 @@ class GridEditorActivity:Activity() {
         trash=PageTrash(this).apply { alpha=0f;translationY=-ui.dp(40).toFloat() }
         preview.addView(trash,FrameLayout.LayoutParams(ui.dp(40),ui.dp(40),Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         fun homeDp(n:Int)=(n*previewContext.resources.displayMetrics.density+.5f).toInt()
-        val spacing=homeDp(draft.getInt("spacing",14));screen.setPadding(spacing,homeDp(10),spacing,homeDp(10))
-        val top=HomeChrome.top(previewContext,draft,ui.t)
-        (top.getChildAt(0) as TextView).text=java.text.SimpleDateFormat("EEE, MMM d",java.util.Locale.getDefault()).format(java.util.Date())
-        screen.addView(top);screen.addView(View(previewContext).apply { background=HomeChrome.accent(ui.t) },LinearLayout.LayoutParams(-1,homeDp(1)))
+        val spacing=homeDp(draft.getInt(Keys.SPACING,14));screen.setPadding(spacing,homeDp(10),spacing,homeDp(10))
+        val top=HomeChrome.TopBar(previewContext,draft,ui.t)
+        top.date.text=java.text.SimpleDateFormat("EEE, MMM d",java.util.Locale.getDefault()).format(java.util.Date())
+        screen.addView(top);screen.addView(View(previewContext).apply { background=HomeChrome.accent(ui.t) },LinearLayout.LayoutParams(MATCH,homeDp(1)))
         val controller=NowPlaying.active(this)
         val strip=CardPages(this,page,-1,pages.size,{ index,host->
             if(index !in pages.indices) {
@@ -157,22 +157,22 @@ class GridEditorActivity:Activity() {
                 host.connect(board);board
             }
         },{ next->page=next;selected=-1;placing=null;render() })
-        screen.addView(strip,LinearLayout.LayoutParams(-1,0,1f).apply { topMargin=homeDp(12);bottomMargin=homeDp(12) })
+        screen.addView(strip,LinearLayout.LayoutParams(MATCH,0,1f).apply { topMargin=homeDp(12);bottomMargin=homeDp(12) })
         if(pages.size>1) screen.addView(TextView(previewContext).apply {
             text=pages.indices.joinToString("  ") { if(it==page) "●" else "○" }
-            textSize=13*draft.getInt("text",100)/100f;setTextColor(ui.t.textSecondary);gravity=Gravity.CENTER
-        },LinearLayout.LayoutParams(-1,homeDp(28)))
+            textSize=13*draft.getInt(Keys.TEXT,100)/100f;setTextColor(ui.t.textSecondary);gravity=Gravity.CENTER
+        },LinearLayout.LayoutParams(MATCH,homeDp(28)))
         val dock=HomeChrome.dock(previewContext,draft,ui.t) { index,_->
             selected=-1;activeBoard?.let { it.selection=-1;it.invalidate() };dockSelected=index;contextPanel();dockMenu(index)
         }
         EditorDockDrag(dock,{ screen.scaleX },{ from,to->
             val items=DockConfig.read(draft);val item=items.removeAt(from);items.add(to,item);DockConfig.save(draft,items)
         },{ render() })
-        screen.addView(dock,LinearLayout.LayoutParams(-1,homeDp(draft.getInt("dock",70))))
+        screen.addView(dock,LinearLayout.LayoutParams(MATCH,homeDp(draft.getInt(Keys.DOCK,70))))
         val real=page in pages.indices
         fun rail(side:Int):LinearLayout=ui.column().apply {
             gravity=Gravity.CENTER_HORIZONTAL;setPadding(0,ui.dp(4),0,ui.dp(4));setOnClickListener { clearSelection() }
-            stage.addView(this,FrameLayout.LayoutParams(ui.dp(68),-1,side))
+            stage.addView(this,FrameLayout.LayoutParams(ui.dp(68),MATCH,side))
         }
         val left=rail(Gravity.LEFT)
         railButton(left,"back","Back") { finish() }
@@ -192,7 +192,7 @@ class GridEditorActivity:Activity() {
         right.addView(View(this),LinearLayout.LayoutParams(1,0,1f))
         railButton(right,"right","Move page right",real && page<pages.lastIndex) { movePage(1) }
         panel=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL;setPadding(ui.dp(8),0,ui.dp(8),0) }
-        root.addView(panel,LinearLayout.LayoutParams(-1,ui.dp(56)));setContentView(root);contextPanel()
+        root.addView(panel,LinearLayout.LayoutParams(MATCH,ui.dp(56)));setContentView(root);contextPanel()
     }
     private fun contextPanel() {
         panel.removeAllViews()
@@ -202,7 +202,7 @@ class GridEditorActivity:Activity() {
             command(panel,"Back to gallery") { gallery(replacement) };command(panel,"Cancel placement") { placing=null;render() };return
         }
         if(dockSelected>=0) {
-            if(DockConfig.read(draft).getOrNull(dockSelected)?.type!=4) command(panel,"Change shortcut") { chooseApp("",dockSelected) }
+            if(DockConfig.read(draft).getOrNull(dockSelected)?.action!=DockAction.APPS) command(panel,"Change shortcut") { chooseApp("",dockSelected) }
             command(panel,"Dock appearance") { dockAppearance() };return
         }
         val tile=pages.getOrNull(page)?.getOrNull(selected)
@@ -214,7 +214,7 @@ class GridEditorActivity:Activity() {
             try { HostedWidgets.host(this).startAppWidgetConfigureActivityForResult(this,HostedWidgets.id(tile.type)!!,0,721,null) }
             catch(_:RuntimeException) { Toast.makeText(this,"This widget has no configuration screen",Toast.LENGTH_SHORT).show() }
         }
-        if(tile.type=="projection" || tile.type=="clock") command(panel,"Projection apps") { ThemedDialogs.Builder(this).setTitle("Projection apps").setItems(arrayOf("CarPlay","Android Auto")) { _,i->chooseApp(if(i==0) "app_carplay" else "app_androidauto") }.show() }
+        if(tile.type=="projection" || tile.type=="clock") command(panel,"Projection apps") { ThemedDialogs.Builder(this).setTitle("Projection apps").setItems(arrayOf("CarPlay","Android Auto")) { _,i->chooseApp(if(i==0) Keys.APP_CARPLAY else Keys.APP_ANDROIDAUTO) }.show() }
         command(panel,"Remove") { edit { pages[page].removeAt(selected);selected=-1 } }
     }
     private fun sample(type:String,w:Int,h:Int):View {
@@ -234,7 +234,7 @@ class GridEditorActivity:Activity() {
             if(group!=style.group) { group=style.group;list.addView(ui.section(group)) }
             list.addView(ui.text(style.name,16,ui.t.textPrimary))
             val size=style.sizes.first();val preview=sample(style.type,size.first,size.second)
-            list.addView(preview,LinearLayout.LayoutParams(-1,ui.dp(170)))
+            list.addView(preview,LinearLayout.LayoutParams(MATCH,ui.dp(170)))
             val sizes=LinearLayout(this);list.addView(sizes)
             style.sizes.forEach { (w,h)->
                 val others=pages[page].filterIndexed { n,_->n!=index }
@@ -251,7 +251,7 @@ class GridEditorActivity:Activity() {
                             .setPositiveButton("New page") { _,_->if(pages.size<5) { edit { pages.add(mutableListOf());page=pages.lastIndex;replacement=-1;placing=GridTile(style.type,0,0,w,h) };dialog.dismiss() } }
                             .setNegativeButton("Back",null).show()
                     }
-                };sizes.addView(button,LinearLayout.LayoutParams(0,-2,1f))
+                };sizes.addView(button,LinearLayout.LayoutParams(0,WRAP,1f))
             }
             val addPageRow=LinearLayout(this)
             command(addPageRow,"Add on a new page") {
@@ -267,8 +267,8 @@ class GridEditorActivity:Activity() {
     private fun appearance() {
         ThemedDialogs.Builder(this).setTitle("Home appearance").setItems(arrayOf("Theme","Wallpaper","Accent color","Vehicle name color","Badge color","Clock & vehicle","Dock appearance")) { _,i->when(i) {
             0->ThemedDialogs.Builder(this).setTitle("Theme").setItems(ThemeTokens.NAMES) { _,n->edit { ThemeTokens.select(previewContext,n) } }.show()
-            1->ThemedDialogs.Builder(this).setTitle("Wallpaper").setItems(WallpaperPack.HOME_NAMES) { _,n->if(n==WallpaperPack.HOME_NAMES.lastIndex) CustomImages.choose(this) else edit { WallpaperPack.select(previewContext,"home",n) } }.show()
-            2->color("accent_color");3->color("brand_color");4->color("badge_color");5->clockOptions();else->dockAppearance()
+            1->ThemedDialogs.Builder(this).setTitle("Wallpaper").setItems(WallpaperPack.HOME_NAMES) { _,n->if(n==WallpaperPack.CUSTOM_INDEX) CustomImages.choose(this) else edit { WallpaperPack.select(previewContext,"home",n) } }.show()
+            2->color(Keys.ACCENT_COLOR);3->color(Keys.BRAND_COLOR);4->color(Keys.BADGE_COLOR);5->clockOptions();else->dockAppearance()
         } }.show()
     }
     private fun text(title:String,key:String,default:String) {
@@ -282,17 +282,17 @@ class GridEditorActivity:Activity() {
         }.setNegativeButton("Cancel",null).show()
     }
     private fun clockOptions() { ThemedDialogs.Builder(this).setTitle("Clock & vehicle").setItems(arrayOf("Clock style","Vehicle name","Vehicle color","Trim text","Trim color","Toggle 24-hour clock")) { _,i->when(i) {
-        0->ThemedDialogs.Builder(this).setTitle("Clock style").setItems(ClockStyles.labels) { _,n->edit { draft.edit().putString("home_clock_style",ClockStyles.ids[n]).apply() } }.show()
-        1->text("Vehicle name","brand_text","CIVIC");2->color("brand_color");3->text("Trim text","badge_text","RS");4->color("badge_color");5->edit { draft.edit().putBoolean("clock24",!draft.getBoolean("clock24",false)).apply() }
+        0->ThemedDialogs.Builder(this).setTitle("Clock style").setItems(ClockStyles.labels) { _,n->edit { draft.edit().putString(Keys.HOME_CLOCK_STYLE,ClockStyles.ids[n]).apply() } }.show()
+        1->text("Vehicle name",Keys.BRAND_TEXT,Defaults.VEHICLE_NAME);2->color(Keys.BRAND_COLOR);3->text("Trim text",Keys.BADGE_TEXT,Defaults.TRIM_BADGE);4->color(Keys.BADGE_COLOR);5->edit { draft.edit().putBoolean(Keys.CLOCK24,!draft.getBoolean(Keys.CLOCK24,false)).apply() }
     } }.show() }
-    private fun corner(left:Boolean) { ThemedDialogs.Builder(this).setTitle(if(left) "Top left" else "Top right").setItems(arrayOf("Weather","Sunrise / sunset","Trim badge","None")) { _,i->edit { draft.edit().putString(if(left) "widget_left" else "widget_right",arrayOf("auto","sun","trim","off")[i]).apply() } }.show() }
+    private fun corner(left:Boolean) { ThemedDialogs.Builder(this).setTitle(if(left) "Top left" else "Top right").setItems(arrayOf("Weather","Sunrise / sunset","Trim badge","None")) { _,i->edit { draft.edit().putString(if(left) Keys.WIDGET_LEFT else Keys.WIDGET_RIGHT,arrayOf("auto","sun","trim","off")[i]).apply() } }.show() }
     private fun dockAppearance() { ThemedDialogs.Builder(this).setTitle("Dock").setItems(arrayOf("Toggle labels","Small icons","Medium icons","Large icons")) { _,i->edit {
-        val e=draft.edit();if(i==0) e.putBoolean("dock_labels",!draft.getBoolean("dock_labels",true)) else e.putInt("dock_icons",intArrayOf(0,20,26,32)[i]);e.apply()
+        val e=draft.edit();if(i==0) e.putBoolean(Keys.DOCK_LABELS,!draft.getBoolean(Keys.DOCK_LABELS,true)) else e.putInt(Keys.DOCK_ICONS,DockConfig.ICON_SIZES[i-1]);e.apply()
     } }.show() }
     private fun chooseApp(key:String,dock:Int=-1) { pendingKey=key;pendingDock=dock;startActivityForResult(Intent(this,AppPickerActivity::class.java).putExtra(AppPickerActivity.ROLE,"editor"),610) }
     private fun apps() {
-        val apps=JSONArray(draft.getString("layout_apps","[]"));val names=Array(apps.length()+1) { i->if(i==0) "Add application" else "Remove "+apps.optString(i).substringBefore('/') }
-        ThemedDialogs.Builder(this).setTitle("Applications").setItems(names) { _,i->if(i==0) chooseApp("layout_apps") else edit { apps.remove(i-1);draft.edit().putString("layout_apps",apps.toString()).apply() } }.show()
+        val apps=JSONArray(draft.getString(Keys.LAYOUT_APPS,"[]"));val names=Array(apps.length()+1) { i->if(i==0) "Add application" else "Remove "+apps.optString(i).substringBefore('/') }
+        ThemedDialogs.Builder(this).setTitle("Applications").setItems(names) { _,i->if(i==0) chooseApp(Keys.LAYOUT_APPS) else edit { apps.remove(i-1);draft.edit().putString(Keys.LAYOUT_APPS,apps.toString()).apply() } }.show()
     }
     @Deprecated("Deprecated in Android") override fun onActivityResult(request:Int,result:Int,data:Intent?) {
         super.onActivityResult(request,result,data)
@@ -310,13 +310,13 @@ class GridEditorActivity:Activity() {
         }
         if(request==CustomImages.PICK && result==RESULT_OK && data?.data!=null) {
             val name=java.util.UUID.randomUUID().toString()
-            CustomImages.importTo(this,data.data!!,"home",java.io.File(images,name)) { edit { draft.edit().putString("_editor_image",name).apply();WallpaperPack.select(previewContext,"home",WallpaperPack.HOME_NAMES.lastIndex) } };return
+            CustomImages.importTo(this,data.data!!,"home",java.io.File(images,name)) { edit { draft.edit().putString(Keys.EDITOR_IMAGE,name).apply();WallpaperPack.select(previewContext,"home",WallpaperPack.CUSTOM_INDEX) } };return
         }
         if(request!=610 || result!=RESULT_OK) return
         val target=data?.getStringExtra(AppPickerActivity.TARGET).orEmpty();if(target.isEmpty()) return
         edit { when {
-            pendingDock>=0->{ val items=DockConfig.read(draft);if(pendingDock in items.indices) { items[pendingDock]=DockConfig.Item(5,target,true);DockConfig.save(draft,items) };pendingDock=-1 }
-            pendingKey=="layout_apps"->{ val a=JSONArray(draft.getString("layout_apps","[]"));if(a.length()<8 && (0 until a.length()).none { a.optString(it)==target }) a.put(target);draft.edit().putString("layout_apps",a.toString()).apply() }
+            pendingDock>=0->{ val items=DockConfig.read(draft);if(pendingDock in items.indices) { items[pendingDock]=DockConfig.Item(DockAction.APP,target,true);DockConfig.save(draft,items) };pendingDock=-1 }
+            pendingKey==Keys.LAYOUT_APPS->{ val a=JSONArray(draft.getString(Keys.LAYOUT_APPS,"[]"));if(a.length()<LayoutPrefs.MAX_APP_SHORTCUTS && (0 until a.length()).none { a.optString(it)==target }) a.put(target);draft.edit().putString(Keys.LAYOUT_APPS,a.toString()).apply() }
             else->draft.edit().putString(pendingKey,target).apply()
         } }
     }
@@ -349,7 +349,7 @@ class GridEditorActivity:Activity() {
         val dialog=ThemedDialogs.Builder(this).setTitle("Ready-made layouts").setView(scroll).setNegativeButton("Cancel",null).create()
         layouts.forEach { (name,tiles)->
             list.addView(ui.text(name,16,ui.t.textPrimary));val board=GridBoard(this,tiles.toMutableList())
-            tiles.forEach { board.addView(sample(it.type,it.w,it.h)) };list.addView(board,LinearLayout.LayoutParams(-1,ui.dp(180)))
+            tiles.forEach { board.addView(sample(it.type,it.w,it.h)) };list.addView(board,LinearLayout.LayoutParams(MATCH,ui.dp(180)))
             val use=LinearLayout(this);command(use,"Use $name") { edit { pages[page]=tiles.toMutableList();selected=-1 };dialog.dismiss() };list.addView(use)
         };dialog.show()
     }
@@ -392,12 +392,12 @@ class GridEditorActivity:Activity() {
     }
     private fun dockMenu(index:Int) {
         val items=DockConfig.read(draft);val item=items.getOrNull(index) ?: return
-        val labels=if(item.type==4) arrayOf("Dock appearance") else arrayOf("Choose application","Choose built-in action","Dock appearance")
+        val labels=if(item.action==DockAction.APPS) arrayOf("Dock appearance") else arrayOf("Choose application","Choose built-in action","Dock appearance")
         ThemedDialogs.Builder(this).setTitle(DockConfig.name(this,item)).setItems(labels) { _,choice->when {
-            item.type==4 || choice==2->dockAppearance()
+            item.action==DockAction.APPS || choice==2->dockAppearance()
             choice==0->chooseApp("",index)
-            else->ThemedDialogs.Builder(this).setTitle("Shortcut action").setItems(DockConfig.NAMES.filterIndexed { n,_->n!=4 }.toTypedArray()) { _,type->
-                edit { items[index]=DockConfig.Item(type,"",true);DockConfig.save(draft,items) }
+            else->ThemedDialogs.Builder(this).setTitle("Shortcut action").setItems(DockAction.ASSIGNABLE.map { it.label }.toTypedArray()) { _,type->
+                edit { items[index]=DockConfig.Item(DockAction.ASSIGNABLE[type],"",true);DockConfig.save(draft,items) }
             }.show()
         } }.show()
     }

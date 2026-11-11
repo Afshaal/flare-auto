@@ -83,7 +83,7 @@ class RedesignChecksActivity:Activity() {
             ProfileStore.preferences(this).edit().putBoolean("saver_music_banner",true).putString("saver_slot_left","weather").putString("saver_slot_right","sun")
                 .putBoolean("weather_enabled",false).putBoolean("solar_manual",true).putString("solar_lat","31.5497").putString("solar_lon","74.3436").apply()
             RedesignFixture.session?.release()
-            RedesignFixture.session=MediaSession(this,"Phase2").apply { setFlags(MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS);isActive=true;setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,0,1f).build()) }
+            RedesignFixture.session=MediaSession(this,"Phase2").apply { isActive=true;setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,0,1f).build()) }
             RedesignFixture.track("Track A")
         }
         val target=when(intent.getStringExtra("screen")) { "saver"->ScreenSaverActivity::class.java;"profiles"->ProfilesActivity::class.java;else->GridEditorActivity::class.java }

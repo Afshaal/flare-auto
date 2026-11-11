@@ -1,7 +1,6 @@
 package app.flare.auto
 
 import android.app.Activity
-import android.content.ComponentName
 import android.content.Intent
 import android.content.SharedPreferences
 import android.os.Handler
@@ -23,31 +22,26 @@ internal class StartupActions(
         val id = bootId()
         if (id.isEmpty()) return
         val device = activity.applicationContext.getSharedPreferences("startup_device", 0)
-        val previous = device.getString("startup_last_boot", prefs.getString("startup_last_boot", "")) ?: ""
+        val previous = device.getString(Keys.STARTUP_LAST_BOOT, prefs.getString(Keys.STARTUP_LAST_BOOT, "")) ?: ""
         if (id == previous) return
-        device.edit().putString("startup_last_boot", id).apply()
+        device.edit().putString(Keys.STARTUP_LAST_BOOT, id).apply()
         if (previous.isEmpty()) return
-        val source = prefs.getString("startup_source", "none") ?: "none"
-        val app = prefs.getString("startup_app", "") ?: ""
-        val saver = prefs.getBoolean("startup_saver", false)
+        val source = prefs.getString(Keys.STARTUP_SOURCE, "none") ?: "none"
+        val app = prefs.getString(Keys.STARTUP_APP, "") ?: ""
+        val saver = prefs.getBoolean(Keys.STARTUP_SAVER, false)
         if (source == "none" && app.isEmpty() && !saver) return
         running = true
-        val delay = (prefs.getInt("startup_delay", 10).coerceIn(5, 30) * 1000L)
+        val delay = (prefs.getInt(Keys.STARTUP_DELAY, 10).coerceIn(5, 30) * 1000L)
         handler.postDelayed(this.source, delay)
     }
 
     private fun runSource() {
         if (!running) return
-        val source = prefs.getString("startup_source", "none") ?: "none"
+        val source = prefs.getString(Keys.STARTUP_SOURCE, "none") ?: "none"
         if (source == "radio" || source == "bluetooth") {
-            val target = prefs.getString(if (source == "radio") "app_radio" else "app_audio", "") ?: ""
-            val component = if (target.isEmpty()) null else ComponentName.unflattenFromString(target)
-            if (component != null) {
-                launch(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(component))
-            } else {
-                val className = if (source == "radio") "com.bw.mediaplayer.ui.RadioActivity" else "com.bw.mediaplayer.ui.BtActivity"
-                launch(Intent().setClassName("com.bw.mediaplayer", className))
-            }
+            val screen = if (source == "radio") KnownApps.RADIO_SCREEN else KnownApps.AUDIO_SCREEN
+            val component = AppLookup.component(prefs.getString(Keys.APP_PREFIX + KnownApps.overrideRole(screen), ""))
+            launch(if (component != null) AppLookup.launcherIntent(component) else Intent().setClassName(screen.packageName, screen.className))
             handler.postDelayed(app, 1200)
         } else {
             runApp()
@@ -56,10 +50,9 @@ internal class StartupActions(
 
     private fun runApp() {
         if (!running) return
-        val target = prefs.getString("startup_app", "") ?: ""
+        val target = prefs.getString(Keys.STARTUP_APP, "") ?: ""
         if (target.isNotEmpty()) {
-            val component = ComponentName.unflattenFromString(target)
-            if (component != null) launch(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setComponent(component))
+            AppLookup.component(target)?.let { launch(AppLookup.launcherIntent(it)) }
             handler.postDelayed(saver, 1200)
         } else {
             runSaver()
@@ -68,7 +61,7 @@ internal class StartupActions(
 
     private fun runSaver() {
         if (!running) return
-        if (prefs.getBoolean("startup_saver", false)) launch(Intent(activity, ScreenSaverActivity::class.java))
+        if (prefs.getBoolean(Keys.STARTUP_SAVER, false)) launch(Intent(activity, ScreenSaverActivity::class.java))
         running = false
         ownTransition = false
     }

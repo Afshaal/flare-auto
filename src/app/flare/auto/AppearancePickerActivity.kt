@@ -22,13 +22,12 @@ class AppearancePickerActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.setBackgroundDrawable(ColorDrawable(ThemeTokens.get(this).background))
-        window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
+        window.immersive()
         ui = UiKit(this)
         mode = intent.getStringExtra("mode") ?: "theme"
         val isTheme = mode == "theme"
         val isSaver = mode == "saver"
         val isDrawer = mode == "drawer"
-        val preferences = ProfileStore.preferences(this)
         names = when {
             isTheme -> ThemeTokens.NAMES
             isDrawer -> arrayOf("Theme background", "Match Home") + WallpaperPack.HOME_NAMES
@@ -40,6 +39,7 @@ class AppearancePickerActivity : Activity() {
             isDrawer -> WallpaperPack.drawerSelection(this) + 2
             else -> WallpaperPack.index(this, isSaver)
         }
+        val customPosition = if (isTheme) -1 else if (isDrawer) WallpaperPack.CUSTOM_INDEX + 2 else WallpaperPack.CUSTOM_INDEX
         val root = ui.column().apply { setBackgroundColor(ui.t.background) }
         val title = when {
             isTheme -> "Theme"
@@ -47,7 +47,7 @@ class AppearancePickerActivity : Activity() {
             isSaver -> "Screensaver wallpaper"
             else -> "Home wallpaper"
         }
-        root.addView(ui.header(title), LinearLayout.LayoutParams(-1, ui.dp(56)))
+        root.addView(ui.header(title), LinearLayout.LayoutParams(MATCH, ui.dp(56)))
         val list = ListView(this).apply { divider = null }
         run {
             val current = LinearLayout(this).apply {
@@ -63,10 +63,10 @@ class AppearancePickerActivity : Activity() {
             current.addView(swatch, LinearLayout.LayoutParams(ui.dp(96), ui.dp(54)))
             current.addView(ui.text("Current: ${names[selected]}", 14, ui.t.textSecondary).apply {
                 setPadding(ui.dp(16), 0, 0, 0)
-            }, LinearLayout.LayoutParams(0, -2, 1f))
-            root.addView(current, LinearLayout.LayoutParams(-1, ui.dp(70)))
+            }, LinearLayout.LayoutParams(0, WRAP, 1f))
+            root.addView(current, LinearLayout.LayoutParams(MATCH, ui.dp(70)))
         }
-        root.addView(list, LinearLayout.LayoutParams(-1, 0, 1f))
+        root.addView(list, LinearLayout.LayoutParams(MATCH, 0, 1f))
         setContentView(root)
         list.adapter = object : BaseAdapter() {
             override fun getCount() = names.size
@@ -86,11 +86,11 @@ class AppearancePickerActivity : Activity() {
                         setPadding(ui.dp(16), 0, 0, 0)
                         id = android.R.id.text1
                     }
-                    addView(label, LinearLayout.LayoutParams(0, -2, 1f))
+                    addView(label, LinearLayout.LayoutParams(0, WRAP, 1f))
                 }
-                val preview = row.findViewById<FrameLayout>(android.R.id.icon)
-                val customChoice = !isTheme && position == names.size - 1
-                preview.getChildAt(0).visibility = if (customChoice) View.VISIBLE else View.GONE
+                val preview = row.findViewById<Thumbnail>(android.R.id.icon)
+                val customChoice = position == customPosition
+                preview.custom.visibility = if (customChoice) View.VISIBLE else View.GONE
                 when {
                     customChoice -> preview.background = GradientDrawable(
                         GradientDrawable.Orientation.TL_BR,
@@ -120,7 +120,7 @@ class AppearancePickerActivity : Activity() {
             }
         }
         list.setOnItemClickListener { _, _, position, _ ->
-            if (!isTheme && position == names.size - 1) {
+            if (position == customPosition) {
                 CustomImages.choose(this)
                 return@setOnItemClickListener
             }
@@ -133,21 +133,28 @@ class AppearancePickerActivity : Activity() {
         }
     }
 
-    private fun thumbnail(): FrameLayout = FrameLayout(this).apply {
-        foreground = GradientDrawable().apply {
-            setColor(android.graphics.Color.TRANSPARENT)
-            cornerRadius = ui.dp(6).toFloat()
-            setStroke(ui.dp(1), 0xff858b96.toInt())
-        }
-        addView(TextView(this@AppearancePickerActivity).apply {
+    /** Wallpaper swatch; [custom] is the "CUSTOM" label shown on the custom-image entry. */
+    private inner class Thumbnail : FrameLayout(this@AppearancePickerActivity) {
+        val custom = TextView(context).apply {
             text = "CUSTOM"
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.WHITE)
             textSize = 10f
             typeface = android.graphics.Typeface.DEFAULT_BOLD
             visibility = View.GONE
-        }, FrameLayout.LayoutParams(-1, -1))
+        }
+
+        init {
+            foreground = GradientDrawable().apply {
+                setColor(android.graphics.Color.TRANSPARENT)
+                cornerRadius = ui.dp(6).toFloat()
+                setStroke(ui.dp(1), 0xff858b96.toInt())
+            }
+            addView(custom, LayoutParams(MATCH, MATCH))
+        }
     }
+
+    private fun thumbnail() = Thumbnail()
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
@@ -158,9 +165,9 @@ class AppearancePickerActivity : Activity() {
         CustomImages.importImage(this, data.data!!, role) {
             val preferences = ProfileStore.preferences(this)
             val editor = preferences.edit()
-                .putInt("custom_revision", preferences.getInt("custom_revision", 0) + 1)
+                .putInt(Keys.CUSTOM_REVISION, preferences.getInt(Keys.CUSTOM_REVISION, 0) + 1)
             editor.apply()
-            WallpaperPack.select(this, if (isDrawer) "drawer" else if (isSaver) "saver" else "home", WallpaperPack.HOME_NAMES.lastIndex)
+            WallpaperPack.select(this, if (isDrawer) "drawer" else if (isSaver) "saver" else "home", WallpaperPack.CUSTOM_INDEX)
             finish()
         }
     }

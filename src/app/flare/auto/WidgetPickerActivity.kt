@@ -13,17 +13,17 @@ class WidgetPickerActivity:Activity() {
     private var delivered=false
     override fun onCreate(state:Bundle?) {
         super.onCreate(state);widget=state?.getInt("widget",-1) ?: -1
-        val ui=UiKit(this);window.decorView.systemUiVisibility=UiFlags.IMMERSIVE
+        val ui=UiKit(this);window.immersive()
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
         val root=ui.column().apply { setBackgroundColor(ui.t.background) };root.addView(ui.header("Installed app widgets"))
-        val scroll=ScrollView(this);val list=ui.column();scroll.addView(list);root.addView(scroll,LinearLayout.LayoutParams(-1,0,1f));setContentView(root)
+        val scroll=ScrollView(this);val list=ui.column();scroll.addView(list);root.addView(scroll,LinearLayout.LayoutParams(MATCH,0,1f));setContentView(root)
         if(!packageManager.hasSystemFeature("android.software.app_widgets")) { list.addView(ui.text("App widgets are not supported by this firmware",16,ui.t.textSecondary));return }
         val providers=AppWidgetManager.getInstance(this).installedProviders.filter { it.widgetCategory and android.appwidget.AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN!=0 }
             .sortedBy { it.loadLabel(packageManager).toString().lowercase(java.util.Locale.getDefault()) }
         if(providers.isEmpty()) list.addView(ui.text("No installed applications provide Home widgets",16,ui.t.textSecondary))
         providers.forEach { info->
             val preview=android.widget.ImageView(this).apply { setImageDrawable(info.loadPreviewImage(this@WidgetPickerActivity,0) ?: info.loadIcon(this@WidgetPickerActivity,0));scaleType=android.widget.ImageView.ScaleType.FIT_CENTER }
-            list.addView(preview,LinearLayout.LayoutParams(-1,ui.dp(130)))
+            list.addView(preview,LinearLayout.LayoutParams(MATCH,ui.dp(130)))
             list.addView(ui.valueRow(info.loadLabel(packageManager).toString(),"Add",Runnable {
                 if(widget>0) return@Runnable
                 try {

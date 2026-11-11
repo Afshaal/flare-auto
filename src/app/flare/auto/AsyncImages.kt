@@ -1,38 +1,23 @@
 package app.flare.auto
 
-import android.content.ComponentName
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.ColorFilter
 import android.graphics.PixelFormat
 import android.graphics.drawable.Drawable
-import android.os.Handler
-import android.os.Looper
 import java.lang.ref.WeakReference
-import java.util.concurrent.Executors
-import java.util.concurrent.ThreadPoolExecutor
-import java.util.concurrent.TimeUnit
 
+/** Drawables loaded on the shared background pool; [load] returns a placeholder that draws the image once ready. */
 internal object AsyncImages {
-    private val executor = (Executors.newFixedThreadPool(2) as ThreadPoolExecutor).apply {
-        setKeepAliveTime(30, TimeUnit.SECONDS)
-        allowCoreThreadTimeOut(true)
-    }
-    private val main = Handler(Looper.getMainLooper())
-
     fun load(context: Context, loader: (Context) -> Drawable?): Drawable {
         val result = Deferred()
         val weak = WeakReference(result)
         val app = context.applicationContext
-        executor.execute {
+        Background.execute {
             val image = try { loader(app) } catch (_: Exception) { null }
-            main.post { weak.get()?.complete(image) }
+            Background.post { weak.get()?.complete(image) }
         }
         return result
-    }
-
-    fun appIcon(context: Context, target: String): Drawable = load(context) { app ->
-        ComponentName.unflattenFromString(target)?.let { app.packageManager.getActivityIcon(it) }
     }
 
     private class Deferred : Drawable() {
@@ -60,6 +45,7 @@ internal object AsyncImages {
         }
         override fun setAlpha(value: Int) { alphaValue = value; image?.alpha = value; invalidateSelf() }
         override fun setColorFilter(value: ColorFilter?) { filter = value; image?.colorFilter = value; invalidateSelf() }
+        @Deprecated("Deprecated in Java")
         override fun getOpacity() = PixelFormat.TRANSLUCENT
     }
 }

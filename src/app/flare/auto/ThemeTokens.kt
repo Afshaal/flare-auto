@@ -27,14 +27,14 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
         )
 
         fun preview(p:android.content.SharedPreferences):ThemeTokens {
-            val index=NAMES.indexOf(p.getString("theme",NAMES[0])).coerceAtLeast(0)
-            return ThemeTokens(VALUES[index],p.getInt("accent_color",VALUES[index][5]))
+            val index=NAMES.indexOf(p.getString(Keys.THEME,NAMES[0])).coerceAtLeast(0)
+            return ThemeTokens(VALUES[index],p.getInt(Keys.ACCENT_COLOR,VALUES[index][5]))
         }
         private var cached: ThemeTokens? = null
         private var cachedMinute = -1L
         private var cachedIndex = -1
 
-        fun mode(context: Context): String = ProfileStore.preferences(context).getString("theme_mode", "dark") ?: "dark"
+        fun mode(context: Context): String = ProfileStore.preferences(context).getString(Keys.THEME_MODE, "dark") ?: "dark"
 
         fun activeIndex(context: Context): Int = effectiveIndex(context)
 
@@ -44,19 +44,19 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
                 "light" -> true
                 "auto" -> {
                     val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
-                    val start = prefs.getInt("theme_day_hour", 7)
-                    val end = prefs.getInt("theme_night_hour", 19)
+                    val start = prefs.getInt(Keys.THEME_DAY_HOUR, 7)
+                    val end = prefs.getInt(Keys.THEME_NIGHT_HOUR, 19)
                     if (start < end) hour in start until end else if (start > end) hour >= start || hour < end else false
                 }
                 else -> false
             }
-            return if (light) prefs.getInt("light_theme_index", 5).coerceIn(5, 7)
-                else prefs.getInt("dark_theme_index", index(context).coerceIn(0, 4)).coerceIn(0, 4)
+            return if (light) prefs.getInt(Keys.LIGHT_THEME_INDEX, 5).coerceIn(5, 7)
+                else prefs.getInt(Keys.DARK_THEME_INDEX, index(context).coerceIn(0, 4)).coerceIn(0, 4)
         }
 
         @JvmStatic
         fun index(context: Context): Int {
-            val name = ProfileStore.preferences(context).getString("theme", NAMES[0])
+            val name = ProfileStore.preferences(context).getString(Keys.THEME, NAMES[0])
             return NAMES.indexOf(name).takeIf { it >= 0 } ?: 0
         }
 
@@ -73,7 +73,7 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
             val values = VALUES[selected]
             return ThemeTokens(
                 values,
-                ProfileStore.preferences(context).getInt("accent_color", values[5])
+                ProfileStore.preferences(context).getInt(Keys.ACCENT_COLOR, values[5])
             ).also { cached = it }
         }
 
@@ -87,9 +87,9 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
         @Synchronized
         fun select(context: Context, index: Int) {
             ProfileStore.preferences(context).edit()
-                .putString("theme", NAMES[Math.floorMod(index, NAMES.size)])
+                .putString(Keys.THEME, NAMES[Math.floorMod(index, NAMES.size)])
                 .putInt(if (index >= 5) "light_theme_index" else "dark_theme_index", index)
-                .putString("theme_mode", if (mode(context) == "auto") "auto" else if (index >= 5) "light" else "dark")
+                .putString(Keys.THEME_MODE, if (mode(context) == "auto") "auto" else if (index >= 5) "light" else "dark")
                 .apply()
             invalidate()
         }

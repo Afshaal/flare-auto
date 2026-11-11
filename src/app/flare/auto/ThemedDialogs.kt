@@ -87,7 +87,7 @@ internal object ThemedDialogs {
                     view.alpha = 0f
                     view.scaleX = .95f
                     view.scaleY = .95f
-                    view.translationY = UiKit(activity).dp(10).toFloat()
+                    view.translationY = activity.dp(10).toFloat()
                     view.animate().alpha(1f).scaleX(1f).scaleY(1f).translationY(0f).setDuration(300)
                         .setInterpolator(android.view.animation.PathInterpolator(.2f, .8f, .2f, 1f)).start()
                 }
@@ -115,7 +115,7 @@ internal object ThemedDialogs {
                 activity.resources.displayMetrics.density).toInt() - 120 - if (buttons.isEmpty()) 0 else 56
             root.addView(
                 list,
-                LinearLayout.LayoutParams(-1, ui.dp(minOf(maxOf(56, available), optionList.size * 64)))
+                LinearLayout.LayoutParams(MATCH, ui.dp(minOf(maxOf(56, available), optionList.size * 64)))
             )
             val builder = AlertDialog.Builder(activity).setView(root).setCancelable(cancelable)
                 .setOnCancelListener(cancelListener).setOnDismissListener(dismissListener)
@@ -132,9 +132,9 @@ internal object ThemedDialogs {
                 override fun getItemId(position: Int) = position.toLong()
 
                 override fun getView(position: Int, recycled: View?, parent: ViewGroup): View {
-                    val row = (recycled as? LinearLayout) ?: ui.valueRow("", "", null)
-                    (row.getChildAt(0) as TextView).text = optionList[position]
-                    val mark = row.getChildAt(1) as TextView
+                    val row = recycled as? UiKit.ValueRow ?: ui.valueRow("", "", null)
+                    row.title.text = optionList[position]
+                    val mark = row.value
                     mark.text = if (position == selected) "✓" else ""
                     mark.setTextColor(ui.t.accent)
                     mark.tag = UiKit.Role.ACCENT
@@ -145,7 +145,7 @@ internal object ThemedDialogs {
                             if (position == selected) ui.t.accent else ui.t.cardBorder
                         )
                     )
-                    row.layoutParams = AbsListView.LayoutParams(-1, ui.dp(64))
+                    row.layoutParams = AbsListView.LayoutParams(MATCH, ui.dp(64))
                     return row
                 }
             }
@@ -161,21 +161,17 @@ internal object ThemedDialogs {
             val window: Window = dialog.window ?: return
             val background = GradientDrawable().apply {
                 setColor(theme.card)
-                cornerRadius = UiKit(activity).dp(16).toFloat()
+                cornerRadius = activity.dp(16).toFloat()
             }
             window.setBackgroundDrawable(background)
-            window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
-            val ui = UiKit(activity)
-            val width = minOf(
-                activity.resources.displayMetrics.widthPixels - ui.dp(40),
-                ui.dp(680)
-            )
+            window.immersive()
+            val width = minOf(activity.resources.displayMetrics.widthPixels - activity.dp(40), activity.dp(680))
             window.setLayout(width, WindowManager.LayoutParams.WRAP_CONTENT)
             tint(window.decorView, theme)
             for (id in intArrayOf(DialogInterface.BUTTON_POSITIVE, DialogInterface.BUTTON_NEGATIVE, DialogInterface.BUTTON_NEUTRAL)) {
                 dialog.getButton(id)?.let {
                     it.setTextColor(theme.accent)
-                    it.minHeight = ui.dp(56)
+                    it.minHeight = activity.dp(56)
                 }
             }
         }

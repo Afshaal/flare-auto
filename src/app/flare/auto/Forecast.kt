@@ -24,7 +24,7 @@ internal class Forecast(context: Context, private val updated: () -> Unit) {
     fun stop() { active = false; generation++; requests.leave(this) }
     fun value(now: Long, lat: Double, lon: Double): Value? {
         val fetched = cache.getLong("fetched", 0)
-        val maxAge = home.getInt("weather_age_days", 2).coerceIn(1, 7) * 86400000L
+        val maxAge = home.getInt(Keys.WEATHER_AGE_DAYS, 2).coerceIn(1, 7) * 86400000L
         if (fetched <= 0 || now < fetched || now - fetched > maxAge) return null
         if (kotlin.math.abs(cache.getFloat("latitude", 999f) - lat) > .25 ||
             kotlin.math.abs(cache.getFloat("longitude", 999f) - lon) > .25) return null
@@ -38,7 +38,7 @@ internal class Forecast(context: Context, private val updated: () -> Unit) {
         } catch (_: Exception) { null }
     }
     fun refresh(lat: Double, lon: Double) {
-        if (!active || !home.getBoolean("weather_enabled", false) || !lat.isFinite() || !lon.isFinite()) return
+        if (!active || !home.getBoolean(Keys.WEATHER_ENABLED, false) || !lat.isFinite() || !lon.isFinite()) return
         val now = System.currentTimeMillis()
         val samePlace = kotlin.math.abs(cache.getFloat("latitude", 999f) - lat) <= .25 &&
             kotlin.math.abs(cache.getFloat("longitude", 999f) - lon) <= .25
@@ -53,18 +53,18 @@ internal class Forecast(context: Context, private val updated: () -> Unit) {
         if (attempts.size > 16) attempts.remove(attempts.keys.first())
         requests.join(key, this, generation)
         val appContext = app
-        Thread {
+        Background.execute {
             val result = download(lat, lon, now)
             main.post {
                 val listeners = requests.complete(key).filter { (listener, token) -> listener.active && listener.generation == token }
                 val settings = ProfileStore.preferences(appContext)
-                if (result != null && listeners.isNotEmpty() && settings.getBoolean("weather_enabled", false)) {
+                if (result != null && listeners.isNotEmpty() && settings.getBoolean(Keys.WEATHER_ENABLED, false)) {
                     appContext.getSharedPreferences("forecast_cache", 0).edit().putString("data", result)
                         .putLong("fetched", System.currentTimeMillis()).putFloat("latitude", lat.toFloat()).putFloat("longitude", lon.toFloat()).apply()
                     listeners.forEach { (listener, _) -> listener.updated() }
                 }
             }
-        }.start()
+        }
     }
     companion object {
         private val main = Handler(Looper.getMainLooper())

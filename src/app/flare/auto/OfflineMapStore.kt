@@ -15,6 +15,8 @@ import java.util.concurrent.Executors
 
 internal object OfflineMapStore {
     interface Listener { fun mapStatusChanged() }
+    private const val DATA_PREFS="offline_map_data"
+    private const val REVISION="revision"
     private const val MAX_BYTES=512L*1024*1024
     private const val RESERVE_BYTES=16L*1024*1024
     val worker=Executors.newSingleThreadExecutor()
@@ -29,6 +31,9 @@ internal object OfflineMapStore {
     fun remove(l:Listener) { listeners.removeAll { it.get()==null || it.get()===l } }
     private fun notify(value:String) { main.post { status=value;listeners.removeAll { it.get()==null };listeners.mapNotNull { it.get() }.forEach { it.mapStatusChanged() } } }
     fun region(c:Context)=File(c.filesDir,"offline_maps/region.map")
+    /** Changes whenever the map data changes, so Home can rebuild its map card. */
+    fun revision(c:Context)=c.getSharedPreferences(DATA_PREFS,0).getLong(REVISION,0)
+    private fun touch(c:Context)=c.getSharedPreferences(DATA_PREFS,0).edit().putLong(REVISION,System.currentTimeMillis()).apply()
     fun ensure(c:Context):File {
         region(c).takeIf { it.isFile }?.let { return it }
         val world=File(c.filesDir,"offline_maps/world.map")
@@ -82,11 +87,11 @@ internal object OfflineMapStore {
                 if(cancelled) error("Download cancelled")
                 MapFile(temp).close()
                 Files.move(temp.toPath(),target.toPath(),StandardCopyOption.REPLACE_EXISTING)
-                app.getSharedPreferences("offline_map_data",0).edit().putLong("revision",System.currentTimeMillis()).apply()
+                touch(app)
                 notify("Offline region ready · %.1f MB".format(java.util.Locale.US,bytes/1048576.0))
             } catch(e:Exception) { notify(if(cancelled) "Download cancelled · previous map kept" else "Map not saved: ${e.message ?: "invalid file"}") }
             finally { connection?.disconnect();connection=null;temp.delete();busy=false;main.post { listeners.mapNotNull { it.get() }.forEach { it.mapStatusChanged() } } }
         }
     }
-    fun delete(c:Context) { if(!busy) { region(c).delete();c.getSharedPreferences("offline_map_data",0).edit().putLong("revision",System.currentTimeMillis()).apply();notify("Using bundled world overview") } }
+    fun delete(c:Context) { if(!busy) { region(c).delete();touch(c);notify("Using bundled world overview") } }
 }

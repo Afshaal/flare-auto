@@ -1,62 +1,29 @@
 package app.flare.auto
 
+import android.Manifest
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothDevice
+import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothProfile
-import android.content.BroadcastReceiver
 import android.content.Context
-import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
 import android.graphics.Canvas
-import android.graphics.Paint
 import android.graphics.Path
-import android.net.ConnectivityManager
-import android.net.Network
 import android.net.NetworkCapabilities
-import android.net.NetworkRequest
+import android.os.Build
 import android.telephony.TelephonyManager
-import android.view.View
 
-internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : View(context) {
-    private val paint = Paint(3)
+/** Bluetooth (off / on / audio device connected) or mobile-network status glyph for the top bar. */
+internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : StatusIcon(context) {
     private val glyph = Path()
     private val slash = Path()
-    private val primary: Int
-    private val secondary: Int
-    private val background: Int
-    private val adapter = BluetoothAdapter.getDefaultAdapter()
-    private var connectivityManager: ConnectivityManager? = null
-    private var registered = false
-    private var receiverRegistered = false
+    private val adapter: BluetoothAdapter? = (context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager)?.adapter
+    /** 0 off / unavailable, 1 on, 2 connected (Bluetooth) or available (mobile). */
     private var state = -1
-    private val receiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context, intent: Intent) {
-            refresh()
-        }
-    }
-    private val network = object : ConnectivityManager.NetworkCallback() {
-        override fun onAvailable(network: Network) {
-            post { refresh() }
-        }
-
-        override fun onLost(network: Network) {
-            post { refresh() }
-        }
-
-        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
-            post { refresh() }
-        }
-    }
 
     init {
-        val theme = ThemeTokens.get(context)
-        primary = theme.textPrimary
-        secondary = theme.textSecondary
-        background = theme.background
-        paint.style = Paint.Style.STROKE
-        paint.strokeWidth = 1.7f
-        paint.strokeCap = Paint.Cap.ROUND
-        paint.strokeJoin = Paint.Join.ROUND
         if (bluetooth) {
             glyph.moveTo(12f, 2f)
             glyph.lineTo(12f, 22f)
@@ -76,65 +43,30 @@ internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : 
         slash.lineTo(20f, 4f)
     }
 
-    override fun onAttachedToWindow() {
-        super.onAttachedToWindow()
-        val filter = IntentFilter()
+    override fun broadcasts() = IntentFilter().apply {
         if (bluetooth) {
-            filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
-            filter.addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
-            filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
-            filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+            addAction(BluetoothAdapter.ACTION_CONNECTION_STATE_CHANGED)
+            addAction(BluetoothDevice.ACTION_ACL_CONNECTED)
+            addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED)
         } else {
-            filter.addAction("android.intent.action.SIM_STATE_CHANGED")
+            addAction(SIM_STATE_CHANGED)
         }
-        context.registerReceiver(receiver, filter)
-        receiverRegistered = true
-        if (!bluetooth) {
-            try {
-                connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager
-                connectivityManager?.registerNetworkCallback(
-                    NetworkRequest.Builder().addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR).build(),
-                    network
-                )
-                registered = connectivityManager != null
-            } catch (_: RuntimeException) {
-            }
-        }
-        refresh()
     }
 
-    override fun onDetachedFromWindow() {
-        if (registered) {
-            connectivityManager?.unregisterNetworkCallback(network)
-            registered = false
-        }
-        if (receiverRegistered) {
-            context.unregisterReceiver(receiver)
-            receiverRegistered = false
-        }
-        super.onDetachedFromWindow()
-    }
+    override val transport: Int? = if (bluetooth) null else NetworkCapabilities.TRANSPORT_CELLULAR
 
-    private fun refresh() {
+    override fun refresh() {
         var value = 0
         if (bluetooth) {
             try {
-                if (adapter?.isEnabled == true) {
-                    value = 1
-                    if (profileConnected(adapter)) {
-                        value = 2
-                    }
-                }
+                if (adapter?.isEnabled == true) value = if (profileConnected(adapter)) 2 else 1
             } catch (_: SecurityException) {
             }
         } else {
             try {
                 val telephony = context.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
-                if (telephony?.simState == TelephonyManager.SIM_STATE_READY) value = 2
-                connectivityManager?.allNetworks?.forEach { network ->
-                    val capabilities = connectivityManager?.getNetworkCapabilities(network)
-                    if (capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true) value = 2
-                }
+                if (telephony?.simState == TelephonyManager.SIM_STATE_READY || networkUp(NetworkCapabilities.TRANSPORT_CELLULAR)) value = 2
             } catch (_: RuntimeException) {
             }
             visibility = if (value == 0) GONE else VISIBLE
@@ -147,19 +79,17 @@ internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : 
                     1 -> "Bluetooth on"
                     else -> "Bluetooth connected"
                 }
-            } else {
-                "Mobile network available"
-            }
+            } else "Mobile network available"
             invalidate()
         }
     }
 
-    @android.annotation.SuppressLint("MissingPermission")
+    @SuppressLint("MissingPermission")
     private fun profileConnected(value: BluetoothAdapter): Boolean {
-        // targetSdk 28 uses the declared legacy BLUETOOTH permission. If raised to 31+,
-        // the runtime CONNECT grant is required; denied vendor calls are also caught by refresh().
-        if (android.os.Build.VERSION.SDK_INT >= 31 && context.applicationInfo.targetSdkVersion >= 31 &&
-            context.checkSelfPermission("android.permission.BLUETOOTH_CONNECT") != android.content.pm.PackageManager.PERMISSION_GRANTED) return false
+        // targetSdk 28 uses the declared legacy BLUETOOTH permission. If raised to 31+, the runtime
+        // CONNECT grant is required; denied vendor calls are also caught by refresh().
+        if (Build.VERSION.SDK_INT >= 31 && context.applicationInfo.targetSdkVersion >= 31 &&
+            context.checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) return false
         return value.getProfileConnectionState(BluetoothProfile.A2DP) == BluetoothAdapter.STATE_CONNECTED ||
             value.getProfileConnectionState(BluetoothProfile.HEADSET) == BluetoothAdapter.STATE_CONNECTED
     }
@@ -167,17 +97,13 @@ internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : 
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         canvas.save()
-        val size = minOf(width, height).toFloat()
-        canvas.translate((width - size) / 2, (height - size) / 2)
-        canvas.scale(size / 24f, size / 24f)
-        canvas.translate(2f, 2f)
-        canvas.scale(20f / 24f, 20f / 24f)
+        canvas.glyphSpace()
         if (!bluetooth) canvas.translate(1.5f, 0f)
         paint.strokeWidth = 1.7f
         paint.color = if (state == 2) primary else secondary
         canvas.drawPath(glyph, paint)
         if (bluetooth && state == 0) {
-            paint.color = background
+            paint.color = backdrop
             paint.strokeWidth = 4f
             canvas.drawPath(slash, paint)
             paint.color = secondary
@@ -185,5 +111,10 @@ internal class DeviceStatus(context: Context, private val bluetooth: Boolean) : 
             canvas.drawPath(slash, paint)
         }
         canvas.restore()
+    }
+
+    private companion object {
+        /** TelephonyIntents.ACTION_SIM_STATE_CHANGED (not public API). */
+        const val SIM_STATE_CHANGED = "android.intent.action.SIM_STATE_CHANGED"
     }
 }

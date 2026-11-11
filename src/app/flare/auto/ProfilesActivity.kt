@@ -2,8 +2,6 @@ package app.flare.auto
 
 import android.app.Activity
 import android.content.Intent
-import android.graphics.Canvas
-import android.graphics.Paint
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
@@ -17,12 +15,12 @@ class ProfilesActivity : Activity() {
     }
     private fun render(reveal:String?=null) {
         val ui=UiKit(this)
-        window.decorView.systemUiVisibility=UiFlags.IMMERSIVE
+        window.immersive()
         window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
         window.attributes=window.attributes.apply { dimAmount=.72f }
         window.setBackgroundDrawable(GradientDrawable().apply { setColor(ui.t.card); cornerRadius=ui.dp(24).toFloat() })
         val root=ui.column().apply { setPadding(ui.dp(28),ui.dp(24),ui.dp(28),ui.dp(20)) }
-        root.addView(ui.text("Who’s driving?",28,ui.t.textPrimary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(-1,ui.dp(52)))
+        root.addView(ui.text("Who’s driving?",28,ui.t.textPrimary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(MATCH,ui.dp(52)))
         val choices=LinearLayout(this).apply { gravity=Gravity.CENTER }
         val avatarSize=minOf(ui.dp(128),(resources.displayMetrics.heightPixels*.22f).toInt())
         val scroll=android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
@@ -45,9 +43,9 @@ class ProfilesActivity : Activity() {
         val add=ui.text("+\nAdd New",24,ui.t.textSecondary).apply { gravity=Gravity.CENTER; setOnClickListener { createProfile(ui) } }
         choices.addView(add,LinearLayout.LayoutParams(avatarSize+ui.dp(32),avatarSize+ui.dp(40)))
         scroll.addView(choices)
-        root.addView(scroll,LinearLayout.LayoutParams(-1,-2))
+        root.addView(scroll,LinearLayout.LayoutParams(MATCH,WRAP))
         revealTile?.let { tile->scroll.post { scroll.smoothScrollTo(tile.left,0) } }
-        root.addView(ui.text("Hold a custom profile to edit or delete it",12,ui.t.textSecondary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(-1,ui.dp(32)))
+        root.addView(ui.text("Hold a custom profile to edit or delete it",12,ui.t.textSecondary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(MATCH,ui.dp(32)))
         root.addView(ui.text("Startup selection",14,ui.t.textSecondary).apply {
             gravity=Gravity.CENTER; minHeight=ui.dp(40)
             setOnClickListener { ThemedDialogs.Builder(this@ProfilesActivity).setTitle("Startup selection")

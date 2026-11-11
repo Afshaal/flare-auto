@@ -12,7 +12,6 @@ import android.graphics.PixelFormat
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.net.Uri
-import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
 import java.io.File
@@ -49,7 +48,7 @@ internal object CustomImages {
         require(role == "home" || role == "drawer" || role == "saverwall" || role == "screen" ||
             role.matches(iconRolePattern)
         ) { "image role" }
-        if(context is EditorContext) context.images?.let { java.io.File(it,if(role=="home") context.draft.getString("_editor_image","home") ?: "home" else role).takeIf { image->image.isFile }?.let { image->return image } }
+        if(context is EditorContext) context.images?.let { java.io.File(it,if(role=="home") context.draft.getString(Keys.EDITOR_IMAGE,"home") ?: "home" else role).takeIf { image->image.isFile }?.let { image->return image } }
         val id = ProfileStore.active(context)
         return File(context.filesDir, if (id == "default") "wallpaper_$role" else "${id}_wallpaper_$role")
     }
@@ -59,11 +58,10 @@ internal object CustomImages {
 
     fun importTo(activity:Activity,uri:Uri,role:String,destination:File,success:Runnable) {
         val context = activity.applicationContext
-        val main = Handler(Looper.getMainLooper())
         val target = destination
         target.parentFile?.mkdirs()
         val driver = ProfileStore.active(context)
-        Thread {
+        Background.execute {
             var temp = try {
                 File.createTempFile("wallpaper_$role", ".tmp", context.filesDir)
             } catch (_: IOException) {
@@ -107,7 +105,7 @@ internal object CustomImages {
                 }
             }
             val done = succeeded
-            main.post {
+            Background.post {
                 if (activity.isFinishing || activity.isDestroyed || ProfileStore.active(context) != driver) return@post
                 if (done) {
                     success.run()
@@ -115,7 +113,7 @@ internal object CustomImages {
                     Toast.makeText(activity, "Could not import image (maximum 32 MB)", Toast.LENGTH_LONG).show()
                 }
             }
-        }.start()
+        }
     }
 
     @JvmStatic
@@ -208,6 +206,8 @@ internal object CustomImages {
             paint.colorFilter = colorFilter
             invalidateSelf()
         }
+
+        @Deprecated("Deprecated in Java")
 
         override fun getOpacity() = PixelFormat.TRANSLUCENT
     }

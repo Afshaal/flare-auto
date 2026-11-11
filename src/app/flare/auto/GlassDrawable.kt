@@ -12,7 +12,7 @@ internal class GlassDrawable(
     private val radius: Float,
     private val border: Int
 ) : Drawable() {
-    private val paint = Paint(3)
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val rect = RectF()
 
     override fun draw(canvas: Canvas) {
@@ -30,5 +30,6 @@ internal class GlassDrawable(
 
     override fun setAlpha(alpha: Int) = Unit
     override fun setColorFilter(colorFilter: ColorFilter?) = Unit
+    @Deprecated("Deprecated in Java")
     override fun getOpacity() = PixelFormat.TRANSLUCENT
 }
