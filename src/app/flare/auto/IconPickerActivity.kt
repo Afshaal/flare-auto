@@ -23,6 +23,12 @@ import java.util.Locale
 
 /** Picks a Simple Icons drawable and colour for one app ([EXTRA_PACKAGE]); returns it as [EXTRA_ICON]. */
 class IconPickerActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui: UiKit
     private val all = ArrayList<Item>()
     private val visible = ArrayList<Item>()

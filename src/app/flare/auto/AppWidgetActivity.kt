@@ -9,6 +9,12 @@ import android.widget.ScrollView
 import org.json.JSONArray
 
 class AppWidgetActivity:Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui:UiKit
     override fun onCreate(state:Bundle?) { super.onCreate(state); render() }
     private fun values():MutableList<String> {

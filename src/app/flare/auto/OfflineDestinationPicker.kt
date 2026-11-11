@@ -29,7 +29,7 @@ internal object OfflineDestinationPicker {
         val status = ui.text("Search ${pack.region} offline · © OpenStreetMap contributors", 12, ui.t.textSecondary)
         body.addView(status)
         val list = ListView(a).apply { divider = null }
-        body.addView(list, LinearLayout.LayoutParams(MATCH, minOf(ui.dp(190), (a.resources.displayMetrics.heightPixels * .32f).toInt())))
+        body.addView(list, LinearLayout.LayoutParams(MATCH, (a.resources.displayMetrics.heightPixels * .45f).toInt()))
         var places = emptyList<Place>()
         val dialog = ThemedDialogs.Builder(a).setTitle("Offline destination").setView(body).setNegativeButton("Close", null).create()
         list.setOnItemClickListener { _, _, i, _ -> places.getOrNull(i)?.let { dialog.dismiss(); chosen(it) } }
@@ -46,14 +46,14 @@ internal object OfflineDestinationPicker {
                     status.text = when {
                         found.isFailure -> "Search unavailable: ${found.exceptionOrNull()?.message}"
                         places.isEmpty() -> "No local match. Try coordinates or long-press the map."
-                        else -> "${places.size} local matches"
+                        else -> "${places.size} local matches · © OpenStreetMap contributors"
                     }
                     list.adapter = object : BaseAdapter() {
                         override fun getCount() = places.size
                         override fun getItem(i: Int) = places[i]
                         override fun getItemId(i: Int) = i.toLong()
                         override fun getView(i: Int, v: View?, parent: ViewGroup) =
-                            ui.text(places[i].name + "\n" + places[i].kind, 14, ui.t.textPrimary).apply {
+                            ui.text(places[i].name + "\n" + kindLabel(places[i].kind), 14, ui.t.textPrimary).apply {
                                 minHeight = ui.dp(54)
                                 setPadding(ui.dp(8), ui.dp(6), ui.dp(8), ui.dp(6))
                             }
@@ -74,6 +74,9 @@ internal object OfflineDestinationPicker {
         dialog.show()
         return dialog
     }
+
+    /** OSM tag value as a label: "fast_food" -> "Fast food". */
+    fun kindLabel(kind: String) = kind.replace('_', ' ').replaceFirstChar { it.uppercase() }
 
     /** Blocking: coordinates typed as "lat, lon" inside the pack, else up to 40 full-text matches. */
     fun find(pack: NavigationPack.Pack, query: String): List<Place> {

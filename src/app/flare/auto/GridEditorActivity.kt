@@ -9,6 +9,12 @@ import android.widget.*
 import org.json.JSONArray
 
 class GridEditorActivity:Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui:UiKit
     private lateinit var draft:EditorDraft
     private lateinit var previewContext:EditorContext

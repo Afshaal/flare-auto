@@ -15,6 +15,12 @@ import android.widget.ListView
 import android.widget.TextView
 
 class AppearancePickerActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui: UiKit
     private lateinit var mode: String
     private lateinit var names: Array<String>

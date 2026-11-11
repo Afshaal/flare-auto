@@ -55,7 +55,7 @@ internal object OfflineMapStore {
         transfer(app) {
             val request=parsed.openConnection() as HttpURLConnection
             connection=request;request.connectTimeout=20000;request.readTimeout=30000;request.instanceFollowRedirects=false
-            request.setRequestProperty("User-Agent","FlareAuto/1.1.0 offline-map-download")
+            request.setRequestProperty("User-Agent","FlareAuto/${appVersion(app)} offline-map-download")
             val code=request.responseCode
             if(code !in 200..299) { request.disconnect();error("Map server returned HTTP $code") }
             if(request.contentLengthLong>MAX_BYTES) { request.disconnect();error("Region exceeds 512 MB; choose a smaller region or subregion") }

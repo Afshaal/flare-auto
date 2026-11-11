@@ -25,3 +25,7 @@ internal object UpdateVersion {
         return 0
     }
 }
+
+/** Installed versionName, for User-Agent strings. */
+internal fun appVersion(context: android.content.Context): String =
+    try { context.packageManager.getPackageInfo(context.packageName, 0).versionName ?: "unknown" } catch (_: Exception) { "unknown" }

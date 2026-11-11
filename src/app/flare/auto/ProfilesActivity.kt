@@ -10,6 +10,12 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 
 class ProfilesActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     override fun onCreate(state: Bundle?) {
         super.onCreate(state);render()
     }
@@ -68,7 +74,7 @@ class ProfilesActivity : Activity() {
     private fun createProfile(ui:UiKit,driver:ProfileStore.Driver?=null) {
         var selected=driver?.avatar ?: 0
         val body=ui.column().apply { setPadding(ui.dp(18),ui.dp(8),ui.dp(18),ui.dp(8)) }
-        val input=android.widget.EditText(this).apply { hint="Profile name";setText(driver?.name.orEmpty()); setSingleLine(); setTextColor(ui.t.textPrimary); filters=arrayOf(android.text.InputFilter.LengthFilter(32)) }
+        val input=android.widget.EditText(this).apply { hint="Profile name";setText(driver?.name.orEmpty()); setSingleLine(); setSelection(text.length); setTextColor(ui.t.textPrimary); filters=arrayOf(android.text.InputFilter.LengthFilter(32)) }
         body.addView(input)
         val icons=LinearLayout(this);body.addView(icons)
         val views=ArrayList<View>()

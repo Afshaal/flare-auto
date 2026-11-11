@@ -39,7 +39,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         setPadding(ui.dp(12),ui.dp(8),ui.dp(12),ui.dp(8));background=GlassDrawable(ui.t.card,ui.dp(12).toFloat(),ui.t.cardBorder)
         addView(title);addView(detail);contentDescription="Offline navigation";minimumHeight=ui.dp(56)
         setOnClickListener {
-            if(route==null && !calculating) search()
+            if(route==null && !calculating && target==null) search()
             else ThemedDialogs.Builder(a).setTitle("Navigation").setItems(arrayOf("Search another destination",if(preview) "Start guidance from GPS" else "Stop navigation",if(p.getBoolean(Keys.OFFLINE_NAV_VOICE,true)) "Mute directions" else "Enable spoken directions")) { _,i->when(i) {
                 0->search()
                 1->if(preview) target?.let { choose(it) } else stopRoute()
@@ -113,7 +113,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         val metres=(step.at-position.along).coerceAtLeast(0.0)
         title.text=distance(metres)+" · "+step.text
         detail.text=summary(remaining,(path.millis*(remaining/path.cumulative.last().coerceAtLeast(1.0))).toLong())
-        if(next!=spoken && metres<200) { spoken=next;speak(if(metres>50) "In ${metres.toInt()} metres, ${step.text}" else step.text) }
+        if(next!=spoken && metres<200) { spoken=next;val said=speakable(step.text);speak(if(metres>50) "In ${metres.toInt()} metres, $said" else said) }
     }
     private fun initVoice() {
         if(voice!=null || !p.getBoolean(Keys.OFFLINE_NAV_VOICE,true)) return
@@ -133,4 +133,14 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         return "${distance(metres)} · $minutes min · $eta"
     }
     private fun distance(m:Double)=if(m<1000) "${(m/10).toInt()*10} m" else "%.1f km".format(Locale.getDefault(),m/1000)
+    companion object {
+        /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */
+        private val NON_LATIN=Regex("[\\u0600-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF]")
+        /** Instruction for the voice: drops an Urdu-only street name ("turn left onto <name>" -> "turn left"). */
+        fun speakable(text:String):String {
+            if(!NON_LATIN.containsMatchIn(text)) return text
+            for(joiner in listOf(" onto "," on "," toward ")) { val at=text.indexOf(joiner);if(at>0 && NON_LATIN.containsMatchIn(text.substring(at))) return text.substring(0,at) }
+            return NON_LATIN.replace(text,"").replace(Regex("\\s+")," ").trim()
+        }
+    }
 }

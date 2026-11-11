@@ -37,6 +37,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     private var follow=true
     /** Receives every GPS fix (used by the navigation panel on the full-screen map). */
     var onLocation:((Location)->Unit)?=null
+    /** Long press on the map (latitude, longitude); null leaves long presses to the map. */
+    var onLongPress:((Double,Double)->Unit)?=null
     private var route:NavRoute?=null
     private var routeLayer:org.mapsforge.map.layer.overlay.Polyline?=null
     private var lastCenter=LatLong(0.0,0.0)
@@ -89,6 +91,16 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             val dark=android.graphics.Color.red(t.background)<128
             layer.setXmlRenderTheme(if(dark) StreamRenderTheme("",context.assets.open("maps/dark.xml")) else MapsforgeThemes.DEFAULT)
             view.layerManager.layers.add(layer)
+            // Invisible layer that turns a long press on the map into a destination (navigation panel only).
+            view.layerManager.layers.add(object:org.mapsforge.map.layer.Layer() {
+                override fun draw(b:org.mapsforge.core.model.BoundingBox?,z:Byte,c:org.mapsforge.core.graphics.Canvas?,o:org.mapsforge.core.model.Point?,r:org.mapsforge.core.model.Rotation?)=Unit
+                // Mapsforge passes null for positions it did not compute (seen: layerXY), so every parameter is nullable.
+                override fun onLongPress(at:LatLong?,layerXY:org.mapsforge.core.model.Point?,tapXY:org.mapsforge.core.model.Point?):Boolean {
+                    val pick=onLongPress ?: return false
+                    if(at==null) return false
+                    post { pick(at.latitude,at.longitude) };return true
+                }
+            })
             bounds=source.boundingBox()
             val center=bounds!!.centerPoint
             val lat=p.getString(Keys.OFFLINE_MAP_LAT,"")?.toDoubleOrNull()?.takeIf { it.isFinite() && it in -85.0..85.0 } ?: center.latitude
@@ -110,7 +122,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             credit.setOnClickListener { ThemedDialogs.Builder(a).setTitle("Map attribution").setMessage("© OpenStreetMap contributors · ODbL 1.0\nhttps://www.openstreetmap.org/copyright\nRendered offline using Mapsforge. License notices are included with this app.").setPositiveButton("Close",null).show() }
             creditText=credit.text.toString();statusLine=credit
             if(!bounds!!.contains(requested)) credit.text="© OpenStreetMap contributors · Center outside saved coverage"
-            addView(credit,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.LEFT))
+            addView(credit,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)) // scale bar bottom-left, zoom buttons bottom-right
             val recenter=TextView(context).apply {
                 text="◎";textSize=24f;gravity=Gravity.CENTER;setTextColor(t.textPrimary);contentDescription="Recenter map"
                 setBackgroundColor((t.card and 0xffffff) or 0xdd000000.toInt())

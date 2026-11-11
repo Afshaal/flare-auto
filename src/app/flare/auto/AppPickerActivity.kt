@@ -24,6 +24,12 @@ import java.util.Locale
  * apps may show screensaver notification banners.
  */
 class AppPickerActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui: UiKit
     private var role = ""
     private var current = ""

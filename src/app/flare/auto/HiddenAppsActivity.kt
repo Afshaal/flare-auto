@@ -16,6 +16,12 @@ import android.widget.TextView
 
 /** Chooses which installed apps the drawer hides (one row per package). */
 class HiddenAppsActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var ui: UiKit
     private lateinit var preferences: android.content.SharedPreferences
     private lateinit var hidden: MutableSet<String>

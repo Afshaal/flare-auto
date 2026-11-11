@@ -17,7 +17,7 @@ internal object MapRegions {
         OfflineMapStore.worker.execute {
             val result=runCatching {
                 val connection=URI(folder).toURL().openConnection() as HttpURLConnection
-                connection.connectTimeout=15000;connection.readTimeout=15000;connection.setRequestProperty("User-Agent","FlareAuto/1.1.0 map-region-browser")
+                connection.connectTimeout=15000;connection.readTimeout=15000;connection.setRequestProperty("User-Agent","FlareAuto/${appVersion(a)} map-region-browser")
                 try {
                     val html=connection.inputStream.use { String(it.readBytes().also { b->check(b.size<512000) { "Region list too large" } },Charsets.UTF_8) }
                     Regex("href=\"([^\"]+)\"",RegexOption.IGNORE_CASE).findAll(html).mapNotNull { match->

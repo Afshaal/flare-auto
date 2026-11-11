@@ -14,6 +14,12 @@ import android.widget.TextView
  * (destination search, route, turn-by-turn); otherwise a one-line notice says why navigation is unavailable.
  */
 class OfflineMapActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var card: OfflineMapCard
     private lateinit var stage: FrameLayout
     private lateinit var notice: TextView
@@ -55,6 +61,11 @@ class OfflineMapActivity : Activity() {
         stage.addView(panel.view, FrameLayout.LayoutParams(width, WRAP, Gravity.TOP or Gravity.START).apply { setMargins(dp(12), dp(12), 0, 0) })
         panel.size(width)
         card.onLocation = panel::update
+        card.onLongPress = { lat, lon ->
+            ThemedDialogs.Builder(this).setTitle("Drive here?").setMessage("%.5f, %.5f".format(java.util.Locale.US, lat, lon))
+                .setPositiveButton("Drive") { _, _ -> panel.choose(OfflineDestinationPicker.Place("Selected point", "coordinate", lat, lon)) }
+                .setNegativeButton("Cancel", null).show()
+        }
     }
 
     override fun onResume() {
@@ -69,6 +80,7 @@ class OfflineMapActivity : Activity() {
 
     override fun onDestroy() {
         card.onLocation = null
+        card.onLongPress = null
         guidance?.close()
         super.onDestroy()
     }

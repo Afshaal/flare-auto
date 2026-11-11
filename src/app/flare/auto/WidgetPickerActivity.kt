@@ -9,6 +9,12 @@ import android.widget.ScrollView
 import android.widget.Toast
 
 class WidgetPickerActivity:Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private var widget=-1
     private var delivered=false
     override fun onCreate(state:Bundle?) {

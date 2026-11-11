@@ -22,6 +22,12 @@ import java.util.Locale
 import kotlin.math.abs
 
 class AppsActivity : Activity() {
+    /** Dialogs take focus; restore full screen when it comes back. */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.immersive()
+    }
+
     private lateinit var page: LinearLayout
     private var settingsSnapshot: Map<String, *> = emptyMap<String, Any>()
     @Volatile private var loadGeneration = 0
