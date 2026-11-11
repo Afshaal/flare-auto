@@ -24,6 +24,8 @@ import kotlin.math.sin
  * Progress is logged with tag FlareSim.
  */
 class DriveSimulatorActivity : Activity() {
+    // Criteria.POWER_LOW / ACCURACY_FINE equal ProviderProperties' values, which need API 31.
+    @android.annotation.SuppressLint("WrongConstant")
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
         val from = coords(intent.getStringExtra("from")) ?: doubleArrayOf(31.52037, 74.358747)

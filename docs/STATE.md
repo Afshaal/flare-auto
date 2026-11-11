@@ -65,3 +65,9 @@ settings). Built by hand on 2026-11-11 (Codex, then Claude):
 
 `turn-restriction-audit.json` named in the brief does not exist yet; only Codex's two-entry
 `tools/legacy/codex-turn-restriction-audit.json` (manual via-way conversions) does.
+
+## 2026-11-12: version 1.2.0
+
+Signed release `work/FlareAuto-v1.2.0.apk` (versionCode 4, same key as 1.1.0). BlueStacks test results, fixes
+and the Civic checklist are in [CIVIC-TEST-1.2.0.md](CIVIC-TEST-1.2.0.md); draft release notes in
+`RELEASE-NOTES-v1.2.0.md`. Not pushed, merged or published.
