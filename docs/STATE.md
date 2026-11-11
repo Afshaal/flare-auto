@@ -78,3 +78,9 @@ and the Civic checklist are in [CIVIC-TEST-1.2.0.md](CIVIC-TEST-1.2.0.md); draft
 (`work/FlareAuto-v1.2.0-r2-source.zip`), are the baseline. Same version as the first 1.2.0 build (1.2.0,
 versionCode 4, same key); it adds the Home fixes (media button colour, clock corners, grid alignment, no page
 dots, no date long-press) and settings tab icons. Compare later work against this tag.
+
+## 2026-11-12: 3D vector map (branch `maps/maplibre`)
+
+MapLibre Native 13.0.2 (OpenGL ES) renderer with heading-up tilt / north-up, using the pack r3 `vector/`
+display map; Mapsforge kept as fallback. Test APK `work/FlareAuto-v1.2.0-maplibre.apk` (same version and key
+as the baseline). Details, install and car checklist: [MAPLIBRE-3D.md](MAPLIBRE-3D.md).

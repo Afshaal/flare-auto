@@ -28,7 +28,7 @@ class KeysTest {
             "saver_weather", "saver_solar", "saver_music_banner", "saver_banners", "saver_banner_private",
             "saver_banner_apps", "saver_banner_position", "saver_banner_seconds", "saver_banner_size",
             "offline_map_enabled", "offline_map_lat", "offline_map_lon", "offline_map_span", "offline_map_follow",
-            "offline_map_url", "offline_nav_active", "offline_nav_lat", "offline_nav_lon", "offline_nav_name",
+            "offline_map_url", "offline_map_vector", "offline_map_heading_up", "offline_nav_active", "offline_nav_lat", "offline_nav_lon", "offline_nav_name",
             "offline_nav_voice", "_editor_image")
         val values = constants().values
         assertEquals("a key constant was added, removed or renamed", expected, values.toSet())
@@ -38,7 +38,7 @@ class KeysTest {
     @Test
     fun homeRebuildKeysAreRealKeys() {
         val all = constants().values.toSet()
-        assertEquals(47, Keys.HOME_UI.size)
+        assertEquals(48, Keys.HOME_UI.size)
         assertTrue(Keys.HOME_UI.minus(all).toString(), all.containsAll(Keys.HOME_UI))
         // Keys that change what Home draws must trigger a rebuild.
         for (key in listOf(Keys.DASHBOARD_PAGES, Keys.WALLPAPER_HOME, Keys.DOCK_ITEMS, Keys.TEXT, Keys.BRAND_TEXT, Keys.THEME_MODE))

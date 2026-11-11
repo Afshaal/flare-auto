@@ -28,6 +28,12 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
         }
         val follow=ui.toggle("Follow GPS position",p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true),Runnable { p.edit().putBoolean(Keys.OFFLINE_MAP_FOLLOW,!p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true)).apply();refresh() })
         ui.add(group,follow);refreshers.add { follow.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true) }
+        val vector=ui.toggle("3D vector map",p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true),Runnable { p.edit().putBoolean(Keys.OFFLINE_MAP_VECTOR,!p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true)).apply();refresh() })
+        ui.add(group,vector);refreshers.add { vector.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true) }
+        row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up, tilted" else "North-up" }) {
+            ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up, tilted 3D","North-up, flat")) { _,i->
+                p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
+        }
         row("Map card size",{ "Resize in Home editor" }) { a.startActivity(Intent(a,GridEditorActivity::class.java)) }
         row("Browse offline regions",{ "Mapsforge download catalog" }) { MapRegions.show(a) { url->p.edit().putString(Keys.OFFLINE_MAP_URL,url).apply();refresh() } }
         row("Offline map source",{ p.getString(Keys.OFFLINE_MAP_URL,"")?.takeIf { it.isNotBlank() } ?: "Choose a .map download URL" }) {
@@ -62,8 +68,8 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
             ThemedDialogs.Builder(a).setTitle("Remove downloaded region?").setMessage("Map files are shared by all driver profiles. The bundled world overview stays available.")
                 .setPositiveButton("Remove") { _,_->OfflineMapStore.delete(a);refresh() }.setNegativeButton("Cancel",null).show()
         }
-        row("Map credits",{ "© OpenStreetMap contributors · Mapsforge · GraphHopper" }) {
-            ThemedDialogs.Builder(a).setTitle("Offline maps").setMessage("Map, routing and place data © OpenStreetMap contributors, ODbL 1.0. Mapsforge renderer, LGPL-3.0 with linking exception. GraphHopper router, Apache-2.0. Bundled world overview: mapsforge.org, 2016-02-20; outlines only. Offline street maps require a regional .map file. Driving routes, place search and spoken directions work offline when the navigation pack is installed (Launcher settings › Offline maps).")
+        row("Map credits",{ "© OpenStreetMap contributors · MapLibre · Mapsforge · GraphHopper" }) {
+            ThemedDialogs.Builder(a).setTitle("Offline maps").setMessage("Map, routing and place data © OpenStreetMap contributors, ODbL 1.0. 3D vector map rendered with MapLibre Native, BSD-2-Clause; labels in Noto Sans and Noto Sans Arabic, SIL OFL 1.1. Mapsforge renderer, LGPL-3.0 with linking exception. GraphHopper router, Apache-2.0. Bundled world overview: mapsforge.org, 2016-02-20; outlines only. Offline street maps require a regional .map file. Driving routes, place search and spoken directions work offline when the navigation pack is installed (Launcher settings › Offline maps).")
                 .setPositiveButton("Close",null).show()
         }
     }

@@ -20,6 +20,14 @@ Brand names and logos — including Apple CarPlay and Android Auto — are trade
 
 [Mapsforge 0.25.0](https://github.com/mapsforge/mapsforge/tree/0.25.0), LGPL-3.0 with the Mapsforge linking exception; AndroidSVG 1.4, Apache-2.0. The bundled world overview is unmodified and dates to 2016-02-20. Full notices, license texts, source links and the map checksum are in `assets/notices/`.
 
+## 3D vector map
+
+[MapLibre Native](https://github.com/maplibre/maplibre-native) 13.0.2 for Android (OpenGL ES), BSD-2-Clause, with
+its MapLibre gestures (BSD-2-Clause), GeoJSON/Turf, OkHttp, Okio, Gson, Timber and AndroidX dependencies
+(Apache-2.0). Vector tiles built with [Planetiler](https://github.com/onthegomap/planetiler) (Apache-2.0, build
+tool only). Labels: [Noto Sans and Noto Sans Arabic](https://notofonts.github.io/), SIL Open Font License 1.1.
+Map data © OpenStreetMap contributors, ODbL 1.0.
+
 ## Offline routing and place search
 
 [GraphHopper 1.0](https://github.com/graphhopper/graphhopper/tree/1.0), Apache-2.0, with HPPC (Apache-2.0), JTS Topology Suite (EPL-2.0 or EDL-1.0; used under EDL-1.0), Apache XML Graphics Commons and Commons IO (Apache-2.0) and SLF4J (MIT).

@@ -27,6 +27,8 @@ android {
         targetSdk = 28
         versionCode = 4
         versionName = "1.2.0"
+        // MapLibre ships native code: arm64-v8a for the head unit (and phones), x86_64 for emulators/BlueStacks.
+        ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
 
     sourceSets {
@@ -90,6 +92,9 @@ dependencies {
     implementation("com.graphhopper:graphhopper-core:1.0")
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
+    // Vector display map (OpenGL ES 3 variant; the default 13.x artifact needs Vulkan). 13.0.2 is the newest
+    // release built with Kotlin 2.0, matching this project's Kotlin plugin.
+    implementation("org.maplibre.gl:android-sdk-opengl:13.0.2")
     testImplementation("junit:junit:4.13.2")
     // Test-only: real org.json on the JVM (android.jar ships stubs). Not packaged in the app.
     testImplementation("org.json:json:20231013")

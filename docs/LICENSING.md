@@ -18,6 +18,12 @@ combination means. It does **not** choose a license; the owner decides. The repo
 | SLF4J API | 1.7.30 | MIT | Maven (via GraphHopper) | No binding bundled (logging is a no-op). |
 | Mapsforge map, reader, Android, themes | 0.25.0 | LGPL-3.0, sections 4(d) and 4(e) waived by Mapsforge | Maven | Full notice in `assets/notices/MAPS-NOTICE.md` and `LGPL-3.0.txt`. |
 | AndroidSVG | 1.4 | Apache-2.0 | Maven (via Mapsforge) | `assets/notices/androidsvg-LICENSE.txt`. |
+| MapLibre Native Android (OpenGL ES) | 13.0.2 | BSD-2-Clause | Maven `org.maplibre.gl:android-sdk-opengl` | 3D vector map; native `libmaplibre.so` for arm64-v8a and x86_64. |
+| MapLibre gestures | 0.0.4 | BSD-2-Clause | Maven (via MapLibre) | |
+| MapLibre GeoJSON / Turf | 6.0.1 | Apache-2.0 | Maven (via MapLibre) | |
+| OkHttp / Okio | 4.12.0 / 3.6.0 | Apache-2.0 | Maven (via MapLibre) | Present for MapLibre's online sources; the app switches MapLibre's network off and its style uses only local files. |
+| Gson, Timber | 2.10.1, 5.0.1 | Apache-2.0 | Maven (via MapLibre) | |
+| AndroidX (annotation, core, fragment, lifecycle, interpolator…) and kotlinx-coroutines | various | Apache-2.0 | Maven (via MapLibre) | Pulled in by MapLibre; the app's own code still uses no AndroidX. |
 | Kotlin standard library | 2.0.21 | Apache-2.0 | Maven | |
 | JetBrains annotations | 13.0 | Apache-2.0 | Maven (compile-time) | |
 
@@ -45,7 +51,11 @@ Test-only, not in the APK: JUnit 4.13.2 (EPL-1.0), org.json 20231013 (public dom
 
 The pack (`gh/` routing graph, `lahore.map`, `search.sqlite`) is built from the Geofabrik Pakistan extract
 of OpenStreetMap (ODbL 1.0). Tools used to build it, not shipped in the APK: GraphHopper 1.0 (Apache-2.0),
-Osmosis 0.49.2 (public domain core; plugins under their own licenses), mapsforge-map-writer 0.25.0 (LGPL-3.0).
+Osmosis 0.49.2 (public domain core; plugins under their own licenses), mapsforge-map-writer 0.25.0 (LGPL-3.0),
+Planetiler 0.10.2 (Apache-2.0). Revision 3 adds `vector/`: vector tiles (another ODbL derivative database), a
+style written for this project, and label glyphs converted from Noto Sans / Noto Sans Arabic (SIL OFL 1.1, licence
+text shipped as `vector/FONTS-OFL.txt`). No Google or other proprietary map assets are used; the night style
+is only inspired by common dark navigation maps.
 
 * The routing graph and the search database are **derivative databases** of OpenStreetMap. If you distribute
   the pack publicly, ODbL requires you to keep the attribution, offer the derivative database (or the
