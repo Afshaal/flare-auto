@@ -1,8 +1,9 @@
 # Flare Auto 1.2.0: test record and Civic checklist
 
-APK: `work/FlareAuto-v1.2.0.apk`. Package `app.flare.auto`, versionCode 4, versionName 1.2.0.
+APK (baseline): `work/FlareAuto-v1.2.0-r2.apk`, source tag `baseline-1.2.0-r2`. Package `app.flare.auto`, versionCode 4, versionName 1.2.0.
 Signed with the same key as 1.1.0 (certificate SHA-256 `98b99cc3…173a0cbc`).
-APK SHA-256 `e763ba32f9c4287f9465ee1d7aa9145a32464d5d51ec956fcbf4b1bae345db8d`.
+APK SHA-256 `40301608f1c6580fb362e14e7d255a8aa51df332b166613da08d4d1b7e9d46d9`. It replaces the first 1.2.0 build
+(`work/FlareAuto-v1.2.0.apk`, kept for reference: black media buttons, no Minimal-clock corners) with the same version.
 Built with `./gradlew clean assembleRelease testDebugUnitTest lintDebug`: 45/45 unit tests, 0 lint errors.
 Navigation pack: `flare-lahore-tools/dist/lahore`, `lahore-20261109-r2` (52/52 regression routes).
 
@@ -40,7 +41,7 @@ Navigation pack: `flare-lahore-tools/dist/lahore`, `lahore-20261109-r2` (52/52 r
 
 ## Check on the Civic
 
-1. Install `FlareAuto-v1.2.0.apk` over 1.1.0 (it must say "update", not "install"); settings stay.
+1. Install `FlareAuto-v1.2.0-r2.apk` over 1.1.0 (it must say "update", not "install"); settings stay.
 2. Copy the pack to `Android/data/app.flare.auto/files/navigation/lahore/` if it is not there yet.
 3. Grant location when asked; Settings › Offline maps › Use current GPS position.
 4. Drive a known route: the blue dot follows the road, instructions change before each turn, ETA is sensible.

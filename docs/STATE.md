@@ -71,3 +71,10 @@ settings). Built by hand on 2026-11-11 (Codex, then Claude):
 Signed release `work/FlareAuto-v1.2.0.apk` (versionCode 4, same key as 1.1.0). BlueStacks test results, fixes
 and the Civic checklist are in [CIVIC-TEST-1.2.0.md](CIVIC-TEST-1.2.0.md); draft release notes in
 `RELEASE-NOTES-v1.2.0.md`. Not pushed, merged or published.
+
+### Baseline: 1.2.0-r2
+
+`work/FlareAuto-v1.2.0-r2.apk` (SHA-256 `40301608…7e9d46d9`) and its source, tag `baseline-1.2.0-r2`
+(`work/FlareAuto-v1.2.0-r2-source.zip`), are the baseline. Same version as the first 1.2.0 build (1.2.0,
+versionCode 4, same key); it adds the Home fixes (media button colour, clock corners, grid alignment, no page
+dots, no date long-press) and settings tab icons. Compare later work against this tag.
