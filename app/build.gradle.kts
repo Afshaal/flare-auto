@@ -47,4 +47,6 @@ dependencies {
     implementation("org.mapsforge:mapsforge-map-android:0.25.0")
     implementation("org.mapsforge:mapsforge-themes:0.25.0")
     testImplementation("junit:junit:4.13.2")
+    // Test-only: real org.json on the JVM (android.jar ships stubs). Not packaged in the app.
+    testImplementation("org.json:json:20231013")
 }

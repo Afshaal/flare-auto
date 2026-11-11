@@ -70,7 +70,8 @@ internal object WallpaperPack {
         else -> prefs.getBoolean(Keys.FLIP_GRADIENTS, false)
     }
 
-    private fun legacyIndex(p: SharedPreferences, saver: Boolean): Int {
+    /** Index for installs that predate "wallpaper_*_v2" (older numbering of the Home and screensaver lists). */
+    internal fun legacyIndex(p: SharedPreferences, saver: Boolean): Int {
         if (!saver) return when (p.getInt(Keys.LEGACY_HOME_WALLPAPER, 0)) {
             0 -> 0; 1 -> 2; 2 -> 3; 3 -> 4; 4 -> 5; 5 -> 6; 6 -> CUSTOM_INDEX; else -> 0
         }

@@ -14,7 +14,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 /** A launcher activity. [target] is the flattened component string stored in preferences. */
 internal class LaunchableApp(val label: String, val packageName: String, val className: String) {
-    val target: String = ComponentName(packageName, className).flattenToString()
+    /** Same string as ComponentName.flattenToString(). */
+    val target: String = "$packageName/$className"
 }
 
 /**
@@ -35,16 +36,22 @@ internal object AppCatalog {
         cached?.let { if (cachedLocale == locale) return it }
         val start = generation.get()
         val pm = app.packageManager
-        val collator = Collator.getInstance()
-        val list = pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
-            .map { LaunchableApp(it.loadLabel(pm).toString(), it.activityInfo.packageName, it.activityInfo.name) }
-            .sortedWith { a, b -> collator.compare(a.label, b.label) }
+        val list = sort(pm.queryIntentActivities(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER), 0)
+            .map { LaunchableApp(it.loadLabel(pm).toString(), it.activityInfo.packageName, it.activityInfo.name) })
         if (generation.get() == start) { cached = list; cachedLocale = locale }
         return list
     }
 
     /** Launcher activities other than this app's own. */
-    fun others(context: Context): List<LaunchableApp> = apps(context).filter { it.packageName != context.packageName }
+    fun others(context: Context): List<LaunchableApp> = withoutPackage(apps(context), context.packageName)
+
+    /** Locale-aware label order, stable for equal labels (ResolveInfo.DisplayNameComparator semantics). */
+    internal fun sort(apps: List<LaunchableApp>): List<LaunchableApp> {
+        val collator = Collator.getInstance()
+        return apps.sortedWith { a, b -> collator.compare(a.label, b.label) }
+    }
+
+    internal fun withoutPackage(apps: List<LaunchableApp>, packageName: String) = apps.filter { it.packageName != packageName }
 
     fun invalidate() { generation.incrementAndGet(); cached = null }
 

@@ -139,8 +139,8 @@ class SettingsActivity : Activity() {
 
         section("PERSONALIZATION")
         group = section("WEATHER")
-        row(group, "Weather location", { if (prefs.getBoolean(Keys.SOLAR_MANUAL, false)) "Manual" else "Automatic location" }) { editSolarLocation() }
-        row(group, "Weather display", { if (prefs.getBoolean(Keys.WEATHER_ENABLED, false)) "Forecast" else "Sunrise / sunset" }) {
+        row(group, "Weather location", { SettingsValues.weatherLocation(prefs) }) { editSolarLocation() }
+        row(group, "Weather display", { SettingsValues.weatherDisplay(prefs) }) {
             ThemedDialogs.Builder(this).setTitle("Weather display")
                 .setItems(arrayOf("Sunrise / sunset", "Weather forecast")) { _, selected ->
                     if (selected == 0) { prefs.edit().putBoolean(Keys.WEATHER_ENABLED, false).apply(); refreshValues() }
@@ -150,13 +150,13 @@ class SettingsActivity : Activity() {
                         .setNegativeButton("Cancel", null).show()
                 }.show()
         }
-        row(group, "Offline forecast limit", { "${prefs.getInt(Keys.WEATHER_AGE_DAYS, 2)} days" }) {
+        row(group, "Offline forecast limit", { SettingsValues.forecastLimit(prefs) }) {
             chooseInt("Offline forecast limit", arrayOf("1 day", "2 days", "3 days", "7 days"), intArrayOf(1, 2, 3, 7), Keys.WEATHER_AGE_DAYS, 2)
         }
         toggle(group, "Fahrenheit", Keys.WEATHER_FAHRENHEIT, false)
 
         group = section("HOME")
-        row(group, "Accent color", ::accentName) { chooseAccent() }
+        row(group, "Accent color", { SettingsValues.accent(prefs) }) { chooseAccent() }
         row(group, "Customize home screen", { "" }) { startActivity(Intent(this, GridEditorActivity::class.java)) }
         toggle(group, "24-hour clock", Keys.CLOCK24, false)
         toggle(group, "Keep display active", Keys.AWAKE, true)
@@ -164,7 +164,7 @@ class SettingsActivity : Activity() {
         group = section("SCREENSAVER")
         for (left in listOf(true, false)) {
             val key = if (left) Keys.SAVER_SLOT_LEFT else Keys.SAVER_SLOT_RIGHT
-            row(group, if (left) "Top-left information" else "Top-right information", { prefs.getString(key, "off") ?: "off" }) {
+            row(group, if (left) "Top-left information" else "Top-right information", { SettingsValues.saverSlot(prefs, left) }) {
                 ThemedDialogs.Builder(this).setTitle("Corner information").setItems(arrayOf("None", "Weather", "Sunrise / sunset", "Both")) { _, i ->
                     prefs.edit().putString(key, arrayOf("off", "weather", "sun", "both")[i]).apply(); refreshValues()
                 }.show()
@@ -180,25 +180,25 @@ class SettingsActivity : Activity() {
         row(group, "Notification access", { if (mediaAllowed()) "Allowed" else "Enable" }) {
             startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
         }
-        row(group, "Banner position", { prefs.getString(Keys.SAVER_BANNER_POSITION, "left") ?: "left" }) {
+        row(group, "Banner position", { SettingsValues.bannerPosition(prefs) }) {
             ThemedDialogs.Builder(this).setTitle("Banner position").setItems(arrayOf("Top left", "Top right", "Alternate corners")) { _, i ->
                 prefs.edit().putString(Keys.SAVER_BANNER_POSITION, arrayOf("left", "right", "alternate")[i]).apply(); refreshValues()
             }.show()
         }
         step(group, "Banner duration (seconds)", Keys.SAVER_BANNER_SECONDS, 2, 15, 5, 1)
         step(group, "Banner size (%)", Keys.SAVER_BANNER_SIZE, 85, 120, 100, 5)
-        row(group, "Display mode", ::saverModeName) { chooseSaverMode() }
+        row(group, "Display mode", { SettingsValues.saverMode(prefs) }) { chooseSaverMode() }
         row(group, "Screensaver wallpaper", { WallpaperPack.name(this, true) }) { appearance("saver") }
         toggleSaverFlip(group)
-        row(group, "Idle timeout", ::timeoutName) {
+        row(group, "Idle timeout", { SettingsValues.timeout(prefs) }) {
             chooseInt("Idle timeout", arrayOf("Off", "1 minute", "5 minutes", "10 minutes", "15 minutes"), intArrayOf(0, 1, 5, 10, 15), Keys.SAVER_TIMEOUT, 0)
         }
-        row(group, "Clock style", { ClockStyles.labels[saverClockIndex()] }) {
-            ThemedDialogs.Builder(this).setTitle("Screensaver clock style").setSingleChoiceItems(ClockStyles.labels, saverClockIndex()) { _, selected ->
+        row(group, "Clock style", { ClockStyles.labels[SettingsValues.saverClockIndex(prefs)] }) {
+            ThemedDialogs.Builder(this).setTitle("Screensaver clock style").setSingleChoiceItems(ClockStyles.labels, SettingsValues.saverClockIndex(prefs)) { _, selected ->
                 prefs.edit().putString(Keys.SAVER_CLOCK_STYLE, ClockStyles.ids[selected]).apply(); refreshValues()
             }.show()
         }
-        row(group, "Clock size", ::clockSizeName) {
+        row(group, "Clock size", { SettingsValues.clockSize(prefs) }) {
             chooseInt("Clock size", arrayOf("Small", "Medium", "Large"), intArrayOf(96, 120, 140), Keys.SAVER_SIZE, 120)
         }
         toggle(group, "Show date", Keys.SAVER_DATE, true)
@@ -214,11 +214,11 @@ class SettingsActivity : Activity() {
                 .putExtra(AppPickerActivity.ROLE, "startup")
                 .putExtra(AppPickerActivity.TARGET, prefs.getString(Keys.STARTUP_APP, "")), REQUEST_PICK)
         }
-        row(group, "Launch delay", { "${prefs.getInt(Keys.STARTUP_DELAY, 10)} sec" }) {
+        row(group, "Launch delay", { SettingsValues.startupDelay(prefs) }) {
             chooseInt("Launch delay", arrayOf("5 seconds", "10 seconds", "20 seconds", "30 seconds"), intArrayOf(5, 10, 20, 30), Keys.STARTUP_DELAY, 10)
         }
         toggle(group, "Start in screensaver", Keys.STARTUP_SAVER, false)
-        row(group, "Initial audio source", ::startupSourceName) { chooseStartupSource() }
+        row(group, "Initial audio source", { SettingsValues.startupSource(prefs) }) { chooseStartupSource() }
 
         group = section("APPLICATION SHORTCUTS")
         for ((label, role) in SHORTCUT_ROLES) {
@@ -232,7 +232,7 @@ class SettingsActivity : Activity() {
         group = section("APP DRAWER")
         row(group, "Icon pack", { IconPacks.name(this) }) { chooseIconPack() }
         step(group, "Grid columns", Keys.COLUMNS, 4, 6, 5, 1)
-        row(group, "Manage hidden apps", { "${prefs.getStringSet(Keys.HIDDEN_APPS, emptySet())?.size ?: 0} hidden" }) {
+        row(group, "Manage hidden apps", { SettingsValues.hiddenApps(prefs) }) {
             startActivity(Intent(this, HiddenAppsActivity::class.java))
         }
 
@@ -380,24 +380,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun scaleRow(group: LinearLayout, name: String, key: String) =
-        row(group, name, { "${prefs.getInt(key, 100)}%" }) { chooseScale(name, key) }
-
-    private fun saverClockIndex() = ClockStyles.ids.indexOf(prefs.getString(Keys.SAVER_CLOCK_STYLE, "classic")).coerceAtLeast(0)
-    private fun saverModeName() = if (prefs.getString(Keys.SAVER_MODE, "clock") == "image") "Wallpaper" else "Clock"
-    private fun timeoutName(): String {
-        val minutes = prefs.getInt(Keys.SAVER_TIMEOUT, 0)
-        return if (minutes == 0) "Off" else "$minutes min"
-    }
-    private fun clockSizeName() = when (prefs.getInt(Keys.SAVER_SIZE, 120)) {
-        96 -> "Small"
-        140 -> "Large"
-        else -> "Medium"
-    }
-    private fun startupSourceName() = when (prefs.getString(Keys.STARTUP_SOURCE, "none")) {
-        "radio" -> "Radio"
-        "bluetooth" -> "Bluetooth"
-        else -> "System default"
-    }
+        row(group, name, { SettingsValues.scale(prefs, key) }) { chooseScale(name, key) }
 
     private fun startupName(): String {
         val target = prefs.getString(Keys.STARTUP_APP, "") ?: ""
@@ -454,9 +437,6 @@ class SettingsActivity : Activity() {
             }.setNegativeButton("Cancel", null).show()
     }
 
-    private fun accentName(): String =
-        if (prefs.contains(Keys.ACCENT_COLOR)) hexColor(prefs.getInt(Keys.ACCENT_COLOR, 0)) else "Theme default"
-
     private fun chooseAccent() {
         val labels = arrayOf("Theme default", "Red", "White", "Orange", "Green", "Blue", "Purple", "Custom color")
         val colors = intArrayOf(0, 0xffe60012.toInt(), Color.WHITE, 0xffffa040.toInt(), 0xff36ca87.toInt(), 0xff56a8ff.toInt(), 0xffb184ff.toInt())
@@ -477,7 +457,7 @@ class SettingsActivity : Activity() {
         val input = EditText(this).apply {
             setSingleLine(true)
             hint = "#RRGGBB"
-            if (prefs.contains(Keys.ACCENT_COLOR)) setText(accentName())
+            if (prefs.contains(Keys.ACCENT_COLOR)) setText(SettingsValues.accent(prefs))
         }
         ThemedDialogs.Builder(this).setTitle("Accent color").setView(input)
             .setPositiveButton("Save") { _, _ ->
@@ -592,9 +572,9 @@ class SettingsActivity : Activity() {
 /** "#RRGGBB" for the RGB part of [color]. */
 internal fun hexColor(color: Int): String = "#" + (color and 0xffffff).toString(16).uppercase(Locale.US).padStart(6, '0')
 
-/** Parses "#RRGGBB" (exactly six hex digits) to an opaque colour, or null. */
+/** Parses "#RRGGBB" (exactly six hex digits) to an opaque colour, or null. Same result as Color.parseColor. */
 internal fun parseHexColor(raw: String): Int? {
     val text = raw.trim()
     if (!text.matches(Regex("#[0-9a-fA-F]{6}"))) return null
-    return Color.parseColor(text)
+    return 0xff000000.toInt() or text.substring(1).toInt(16)
 }
