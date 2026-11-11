@@ -62,8 +62,8 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
             ThemedDialogs.Builder(a).setTitle("Remove downloaded region?").setMessage("Map files are shared by all driver profiles. The bundled world overview stays available.")
                 .setPositiveButton("Remove") { _,_->OfflineMapStore.delete(a);refresh() }.setNegativeButton("Cancel",null).show()
         }
-        row("Map credits",{ "© OpenStreetMap contributors · Mapsforge" }) {
-            ThemedDialogs.Builder(a).setTitle("Offline maps").setMessage("OpenStreetMap data © OpenStreetMap contributors, ODbL 1.0. Mapsforge renderer, LGPL-3.0 with linking exception. Bundled world overview: mapsforge.org, 2016-02-20; outlines only. Offline street maps require a regional .map file. Driving routes, place search and spoken directions work offline when the navigation pack is installed (Launcher settings › Offline maps).")
+        row("Map credits",{ "© OpenStreetMap contributors · Mapsforge · GraphHopper" }) {
+            ThemedDialogs.Builder(a).setTitle("Offline maps").setMessage("Map, routing and place data © OpenStreetMap contributors, ODbL 1.0. Mapsforge renderer, LGPL-3.0 with linking exception. GraphHopper router, Apache-2.0. Bundled world overview: mapsforge.org, 2016-02-20; outlines only. Offline street maps require a regional .map file. Driving routes, place search and spoken directions work offline when the navigation pack is installed (Launcher settings › Offline maps).")
                 .setPositiveButton("Close",null).show()
         }
     }

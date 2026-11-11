@@ -27,3 +27,21 @@
 | Home rebuild after a settings change | not measured (no timing hook in the app) |
 
 The baseline device run used `adb shell input` for the drawer swipes; see `DECISIONS.md` D-02.
+
+## After (commit fdfa56d and later)
+
+| Metric | Baseline | After |
+|---|---|---|
+| Kotlin compiler warnings (unique) | 42 | 0 |
+| Lint | 0 errors / 5,319 warnings | 0 errors / 1,797 warnings (1,689 are long icon paths) |
+| Unit tests | 12 | 41, all pass |
+| Release APK (unsigned) | 9,136,367 B | 7,659,987 B (R8 + resource shrinking) |
+| Release method references | 43,006 | 12,630 |
+| Signed release APK | 9,428,608 B | 7,948,024 B (−15.7 %) |
+
+A/B on the same BlueStacks state (`docs/metrics-after.txt`, 7 cold starts each, median of runs 2–7):
+cold start 196 ms → 192 ms; idle PSS 50,645 → 51,005 KB (single sample); idle CPU 0 % both. No measurable
+change on this emulator; the earlier 137 ms / 46.8 MB baseline was taken in a different emulator state.
+Drawer jank was not re-measured (needs `adb shell input`, outside the allowed commands).
+
+The per-item table (1–38) and the final on-device checklist were not written before the session ended.
