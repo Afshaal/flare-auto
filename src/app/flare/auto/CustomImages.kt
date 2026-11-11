@@ -49,15 +49,21 @@ internal object CustomImages {
         require(role == "home" || role == "drawer" || role == "saverwall" || role == "screen" ||
             role.matches(iconRolePattern)
         ) { "image role" }
-        return File(context.filesDir, "wallpaper_$role")
+        if(context is EditorContext) context.images?.let { java.io.File(it,if(role=="home") context.draft.getString("_editor_image","home") ?: "home" else role).takeIf { image->image.isFile }?.let { image->return image } }
+        val id = ProfileStore.active(context)
+        return File(context.filesDir, if (id == "default") "wallpaper_$role" else "${id}_wallpaper_$role")
     }
 
     @JvmStatic
-    fun importImage(activity: Activity, uri: Uri, role: String, success: Runnable) {
+    fun importImage(activity: Activity, uri: Uri, role: String, success: Runnable) = importTo(activity,uri,role,file(activity,role),success)
+
+    fun importTo(activity:Activity,uri:Uri,role:String,destination:File,success:Runnable) {
         val context = activity.applicationContext
         val main = Handler(Looper.getMainLooper())
+        val target = destination
+        target.parentFile?.mkdirs()
+        val driver = ProfileStore.active(context)
         Thread {
-            val target = file(context, role)
             var temp = try {
                 File.createTempFile("wallpaper_$role", ".tmp", context.filesDir)
             } catch (_: IOException) {
@@ -102,7 +108,7 @@ internal object CustomImages {
             }
             val done = succeeded
             main.post {
-                if (activity.isFinishing || activity.isDestroyed) return@post
+                if (activity.isFinishing || activity.isDestroyed || ProfileStore.active(context) != driver) return@post
                 if (done) {
                     success.run()
                 } else {
@@ -136,8 +142,8 @@ internal object CustomImages {
         val key = cacheKey(context, role, target)
         synchronized(cache) { cache.get(key)?.let { return Crop(it) } }
         return if (Looper.myLooper() == Looper.getMainLooper()) AsyncImages.load(context) { app ->
-            synchronized(cache) { loadCached(app, role) }
-        } else synchronized(cache) { loadCached(context, role) }
+            synchronized(cache) { loadCached(app, role, target) }
+        } else synchronized(cache) { loadCached(context, role, target) }
     }
 
     private fun limit(context: Context, role: String): Int = if (role.startsWith("icon_")) 256 else
@@ -147,8 +153,8 @@ internal object CustomImages {
         "${file.absolutePath}:${file.lastModified()}:${file.length()}:${limit(context, role)}"
 
     @JvmStatic
-    fun loadCached(context: Context, role: String): Drawable? {
-        val file = file(context, role)
+    fun loadCached(context: Context, role: String, target:File?=null): Drawable? {
+        val file = target ?: file(context, role)
         if (!file.isFile) return null
         val limit = limit(context, role)
         val key = cacheKey(context, role, file)

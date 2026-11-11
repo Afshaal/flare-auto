@@ -98,7 +98,7 @@ class AppsActivity : Activity() {
         finishPaging()
         loaded = false
         val generation = ++loadGeneration
-        settingsSnapshot = HashMap(getSharedPreferences("home", 0).all)
+        settingsSnapshot = HashMap(ProfileStore.preferences(this).all)
         Thread { loadApps(generation) }.start()
     }
 
@@ -198,7 +198,7 @@ class AppsActivity : Activity() {
             loadedEntries.add(Entry(label, icon, packageName, resolveInfo.activityInfo.name, iconColor))
         }
 
-        val saved = getSharedPreferences("home", 0)
+        val saved = ProfileStore.preferences(this)
         val pack = IconPacks.load(this)
         applyPack(saved, loadedEntries, pack)
         val hidden = saved.getStringSet("hidden_apps", Collections.emptySet()) ?: emptySet()
@@ -208,11 +208,11 @@ class AppsActivity : Activity() {
             entries = loadedEntries
             activePack = pack
             loaded = true
-            if (appListChanged(settingsSnapshot, getSharedPreferences("home", 0).all)) {
+            if (appListChanged(settingsSnapshot, ProfileStore.preferences(this).all)) {
                 reloadApps()
                 return@post
             }
-            settingsSnapshot = getSharedPreferences("home", 0).all
+            settingsSnapshot = ProfileStore.preferences(this).all
             theme = ThemeTokens.get(this)
             UiKit(this).recolor(page)
             page.background = WallpaperPack.drawer(this, theme)
@@ -243,7 +243,7 @@ class AppsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (!loaded) return
-        val current = getSharedPreferences("home", 0).all
+        val current = ProfileStore.preferences(this).all
         if (appListChanged(settingsSnapshot, current)) reloadApps()
         else if (settingsSnapshot != current) {
             finishPaging()
@@ -296,7 +296,7 @@ class AppsActivity : Activity() {
     }
 
     private fun pageCount(): Int {
-        val columns = getSharedPreferences("home", 0).getInt("columns", 5).coerceIn(4, 6)
+        val columns = ProfileStore.preferences(this).getInt("columns", 5).coerceIn(4, 6)
         return maxOf(1, (entries.size + columns * 2 - 1) / (columns * 2))
     }
 
@@ -385,7 +385,7 @@ class AppsActivity : Activity() {
 
     private fun render() {
         grid.removeAllViews()
-        val preferences = getSharedPreferences("home", 0)
+        val preferences = ProfileStore.preferences(this)
         val columns = preferences.getInt("columns", 5).coerceIn(4, 6)
         val pages = maxOf(1, (entries.size + columns * 2 - 1) / (columns * 2))
         pageNo = pageNo.coerceIn(0, pages - 1)
@@ -492,7 +492,7 @@ class AppsActivity : Activity() {
         ) {
             val packageName = pendingImagePackage!!
             CustomImages.importImage(this, data.data!!, CustomImages.iconRole(packageName), Runnable {
-                getSharedPreferences("home", 0).edit().putBoolean("icon_image_$packageName", true).apply()
+                ProfileStore.preferences(this).edit().putBoolean("icon_image_$packageName", true).apply()
                 pendingImagePackage = null
                 render()
             })

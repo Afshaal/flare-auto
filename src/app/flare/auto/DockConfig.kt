@@ -57,7 +57,7 @@ internal object DockConfig {
     fun maxSlots(context: Context): Int {
         val metrics = context.resources.displayMetrics
         val width = (metrics.widthPixels / metrics.density).toInt()
-        val spacing = context.getSharedPreferences("home", 0).getInt("spacing", 14)
+        val spacing = ProfileStore.preferences(context).getInt("spacing", 14)
         return maxOf(1, (width - spacing * 2) / 56)
     }
 
@@ -65,7 +65,7 @@ internal object DockConfig {
     fun size(context: Context, count: Int, desired: Int): Int {
         val metrics = context.resources.displayMetrics
         val width = (metrics.widthPixels / metrics.density).toInt() -
-            2 * context.getSharedPreferences("home", 0).getInt("spacing", 14)
+            2 * ProfileStore.preferences(context).getInt("spacing", 14)
         return maxOf(1, minOf(desired, maxOf(1, width / maxOf(1, count) - 16)))
     }
 

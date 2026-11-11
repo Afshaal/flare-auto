@@ -7,12 +7,10 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Path
 import android.graphics.Typeface
 import android.graphics.drawable.Drawable
-import android.graphics.drawable.GradientDrawable
 import android.media.AudioManager
 import android.media.MediaMetadata
 import android.media.session.MediaController
@@ -52,6 +50,10 @@ class HomeActivity : Activity() {
     private var dimOverlay: View? = null
     private var resumed = false
     private lateinit var prefs: SharedPreferences
+    private var driverId = "default"
+    private var askDriver = false
+    private var currentPage = 0
+    private var renderedPages: String? = null
     private var uiDirty = false
     private var attachedScale = 100
     private var playbackButton: ImageView? = null
@@ -90,7 +92,7 @@ class HomeActivity : Activity() {
                 dimOverlay?.visibility =
                     if (prefs.getBoolean("auto_dim", false) && it.night()) View.VISIBLE else View.GONE
             }
-            environment2?.updateSolar()
+            cards.environments.drop(1).forEach { it.updateSolar() }
             handler.postDelayed(this, 60000)
         }
     }
@@ -130,16 +132,6 @@ class HomeActivity : Activity() {
 
     private fun pad(view: View, horizontal: Int, vertical: Int) {
         view.setPadding(dp(horizontal), dp(vertical), dp(horizontal), dp(vertical))
-    }
-
-    private fun accentGradient(): GradientDrawable {
-        val end = (theme.accent and 0x00ffffff) or 0x18000000
-        val middle = Color.rgb(
-            (Color.red(theme.accent) * 7 + Color.red(muted) * 3) / 10,
-            (Color.green(theme.accent) * 7 + Color.green(muted) * 3) / 10,
-            (Color.blue(theme.accent) * 7 + Color.blue(muted) * 3) / 10
-        )
-        return GradientDrawable(GradientDrawable.Orientation.LEFT_RIGHT, intArrayOf(end, middle, end))
     }
 
     private fun launch(packageName: String, className: String?) {
@@ -215,13 +207,19 @@ class HomeActivity : Activity() {
         audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, key))
     }
 
-    override fun attachBaseContext(base: android.content.Context) { super.attachBaseContext(UiScale.wrap(base, "ui_scale_home")) }
+    override fun attachBaseContext(base: android.content.Context) {
+        askDriver = ProfileStore.prepareStartup(base)
+        super.attachBaseContext(UiScale.wrap(base, "ui_scale_home"))
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        driverId = ProfileStore.active(this)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ThemeTokens.get(this).background))
-        prefs = getSharedPreferences("home", 0)
+        prefs = ProfileStore.preferences(this)
         attachedScale = prefs.getInt("ui_scale_home", 100)
+        currentPage = savedInstanceState?.getInt("dashboard_page") ?: prefs.getInt("dashboard_default", 0)
+        renderedPages = prefs.getString(DashboardPages.KEY, null)
         startup = StartupActions(this, prefs, handler)
         instance = WeakReference(this)
         window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
@@ -230,8 +228,7 @@ class HomeActivity : Activity() {
     }
 
     private fun build() {
-        environment?.stop()
-        environment2?.stop()
+        if (::cards.isInitialized) { cards.environments.forEach { it.stop() };cards.maps.forEach { it.stop() } }
         environment = null
         environment2 = null
         playbackButton = null
@@ -282,19 +279,45 @@ class HomeActivity : Activity() {
     }
 
     private fun buildTopBar() {
-        val top = row()
-        date = text("", 19, white, true)
-        top.addView(date, LinearLayout.LayoutParams(0, dp(40), 1f))
-        top.addView(DeviceStatus(this, false), LinearLayout.LayoutParams(dp(24), dp(24)))
-        val wifiParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { leftMargin = dp(14) }
-        top.addView(WifiStatus(this), wifiParams)
-        val bluetoothParams = LinearLayout.LayoutParams(dp(24), dp(24)).apply { leftMargin = dp(14) }
-        top.addView(DeviceStatus(this, true), bluetoothParams)
+        val top=HomeChrome.top(this,prefs,theme)
+        date=top.getChildAt(0) as TextView
+        date.setOnLongClickListener { startActivity(Intent(this,ProfilesActivity::class.java));true }
         root.addView(top)
-        root.addView(View(this).apply { background = accentGradient() }, LinearLayout.LayoutParams(-1, dp(1)))
+        root.addView(View(this).apply { background=HomeChrome.accent(theme) },LinearLayout.LayoutParams(-1,dp(1)))
     }
 
     private fun buildColumns(content: LinearLayout) {
+        val raw = prefs.getString(DashboardPages.KEY, null)
+        val pages = DashboardPages.decode(raw)
+        if (pages != null) {
+            if (renderedPages != raw) { currentPage = prefs.getInt("dashboard_default", 0); renderedPages = raw }
+            currentPage = currentPage.coerceIn(0, pages.lastIndex)
+            val strip = CardPages(this,currentPage,0,pages.lastIndex,{ index,host ->
+                val board=GridBoard(this,pages[index])
+                val active=index==currentPage
+                val renderer=if(active) cards else HomeCards(this,prefs,theme,preview=true)
+                pages[index].forEach { tile ->
+                    val cell=row()
+                    if(active) buildCard(cell,tile.type,tile.h<5) else renderer.build(cell,tile.type,tile.h<5)
+                    board.addView(CardFrame(this,cell,tile.type))
+                }
+                if(!active) {
+                    val metadata=selectedController?.metadata
+                    renderer.trackTitle?.text=trackTitle?.text ?: metadata?.getString(MediaMetadata.METADATA_KEY_TITLE) ?: "No media playing"
+                    renderer.trackArtist?.text=trackArtist?.text ?: metadata?.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: ""
+                    renderer.albumArt?.setImageDrawable(albumArt?.drawable?.constantState?.newDrawable() ?: (metadata?.getBitmap(MediaMetadata.METADATA_KEY_ART) ?: metadata?.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART))?.let { android.graphics.drawable.BitmapDrawable(resources,it) })
+                    renderer.playbackButton?.setImageDrawable(MediaGlyph(if(isPlaying(selectedController)) "pause" else "play",white))
+                }
+                host.connect(board); board
+            },{ next -> currentPage=next; build() })
+            content.addView(strip, LinearLayout.LayoutParams(-1,-1))
+            if (pages.size > 1) root.addView(text(pages.indices.joinToString("  ") { if (it == currentPage) "●" else "○" }, 13, muted, false).apply {
+                gravity = Gravity.CENTER; contentDescription = "Page ${currentPage + 1} of ${pages.size}"
+
+            }, LinearLayout.LayoutParams(-1, dp(28)))
+            return
+        }
+
         val left = card(prefs, true)
         val right = card(prefs, false)
         val showLeft = left != "hidden"
@@ -313,8 +336,8 @@ class HomeActivity : Activity() {
         }
     }
 
-    private fun buildCard(content: LinearLayout, card: String) {
-        cards.build(content, card)
+    private fun buildCard(content: LinearLayout, card: String, compact: Boolean = false) {
+        cards.build(content, card, compact)
         environment = cards.environments.getOrNull(0)
         environment2 = cards.environments.getOrNull(1)
         playbackButton = cards.playbackButton
@@ -330,55 +353,15 @@ class HomeActivity : Activity() {
     }
 
     private fun buildDock() {
-        val nav = row().apply { background = shape(panel, 14) }
-        root.addView(nav, LinearLayout.LayoutParams(-1, dp(prefs.getInt("dock", 70))))
-        val actions = arrayOf<() -> Unit>(
-            { launch("com.bw.mediaplayer", "com.bw.mediaplayer.ui.BtActivity") },
-            { launch("com.bw.mediaplayer", "com.bw.mediaplayer.ui.RadioActivity") },
-            { launch("com.bw.phone", "com.bw.phone.MainActivity") },
-            { startActivity(Intent(this, ScreenSaverActivity::class.java)) },
-            { apps() }
-        )
-        val items = DockConfig.read(prefs)
-        val count = items.count { it.visible }
-        val oldSize = prefs.getInt("dock_icons", 24)
-        val ceiling = if (oldSize < 23) 20 else if (oldSize < 30) 26 else 32
-        val size = DockConfig.size(this, count, ceiling)
-        for (item in items) {
-            if (!item.visible) continue
-            val cell = column().apply {
-                gravity = Gravity.CENTER
-                val name = DockConfig.name(this@HomeActivity, item)
-                contentDescription = name
-                setOnClickListener {
-                    if (item.type == 5) launchTarget(item.target) else actions[item.type]()
-                }
-            }
-            val icon: View = if (item.type == 5) {
-                ImageView(this).apply {
-                    try {
-                        setImageDrawable(AsyncImages.appIcon(this@HomeActivity, item.target))
-                    } catch (_: Exception) {
-                    }
-                    if (prefs.getBoolean("dock_mono", false)) {
-                        val matrix = android.graphics.ColorMatrix().apply { setSaturation(0f) }
-                        setColorFilter(android.graphics.ColorMatrixColorFilter(matrix))
-                    }
-                }
-            } else {
-                NavIcon(this, DockConfig.ICONS[item.type], white)
-            }
-            cell.addView(icon, LinearLayout.LayoutParams(dp(size), dp(size)))
-            val label = text(DockConfig.name(this, item), 14, white, false).apply {
-                gravity = Gravity.CENTER
-                includeFontPadding = false
-                isSingleLine = true
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                visibility = if (prefs.getBoolean("dock_labels", true)) View.VISIBLE else View.GONE
-            }
-            cell.addView(label, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(4) })
-            nav.addView(cell, LinearLayout.LayoutParams(0, -1, 1f))
-        }
+        val actions=arrayOf<()->Unit>(
+            { launch("com.bw.mediaplayer","com.bw.mediaplayer.ui.BtActivity") },
+            { launch("com.bw.mediaplayer","com.bw.mediaplayer.ui.RadioActivity") },
+            { launch("com.bw.phone","com.bw.phone.MainActivity") },
+            { startActivity(Intent(this,ScreenSaverActivity::class.java)) },
+            { apps() })
+        root.addView(HomeChrome.dock(this,prefs,theme) { _,item->
+            if(item.type==5) launchTarget(item.target) else actions[item.type]()
+        },LinearLayout.LayoutParams(-1,dp(prefs.getInt("dock",70))))
     }
 
     private var mediaAccessHint: TextView? = null
@@ -392,6 +375,7 @@ class HomeActivity : Activity() {
     private var progress: SeekBar? = null
     private var seekRow: LinearLayout? = null
     private var dragging = false
+    private var mapRevision=0L
     private var mediaNarrow = false
     private var sessionManager: MediaSessionManager? = null
     private val sourceLabels = HashMap<String, String>()
@@ -618,6 +602,11 @@ class HomeActivity : Activity() {
         startActivity(Intent(this, AppsActivity::class.java))
     }
 
+    override fun onSaveInstanceState(out: Bundle) {
+        out.putInt("dashboard_page", currentPage)
+        super.onSaveInstanceState(out)
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
@@ -633,18 +622,23 @@ class HomeActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        if (driverId != ProfileStore.active(this)) { recreate(); return }
+        if (askDriver) { askDriver = false; startActivity(Intent(this, ProfilesActivity::class.java)); return }
         if (attachedScale != prefs.getInt("ui_scale_home", 100)) { recreate(); return }
         resumed = true
+        val revision=getSharedPreferences("offline_map_data",0).getLong("revision",0)
+        if(revision!=mapRevision) { mapRevision=revision;uiDirty=true }
         if (uiDirty || theme !== ThemeTokens.get(this)) {
             build()
             uiDirty = false
         } else {
-            environment?.start()
-            environment2?.start()
+            cards.environments.forEach { it.start() }
         }
+        cards.maps.forEach { it.start() }
         handler.removeCallbacks(tick)
         handler.post(tick)
         startMedia()
+        if(HostedWidgets.ids(prefs.getString(DashboardPages.KEY,null)).isNotEmpty()) HostedWidgets.start(this)
         startup.onResume()
         startup.checkBoot()
         scheduleScreenOff()
@@ -661,14 +655,16 @@ class HomeActivity : Activity() {
         handler.removeCallbacks(screenOff)
         startup.onPause()
         stopMedia()
-        environment?.stop()
-        environment2?.stop()
+        HostedWidgets.stop(this)
+        cards.environments.forEach { it.stop() }
+        cards.maps.forEach { it.stop() }
         super.onPause()
     }
 
     override fun onDestroy() {
         prefs.unregisterOnSharedPreferenceChangeListener(settingsChanged)
         startup.cancel()
+        HostedWidgets.destroy(this)
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
@@ -859,7 +855,7 @@ class HomeActivity : Activity() {
 
     companion object {
         private val UI_KEYS = setOf(
-                "theme_mode", "theme_day_hour", "theme_night_hour", "light_theme_index", "dark_theme_index", "theme", "accent_color", "brand_text", "badge_text", "brand_color", "badge_color", "widget_left", "widget_right", "home_clock_style", "solar_manual", "solar_lat", "solar_lon",
+                "dashboard_pages", "dashboard_default", "offline_map_enabled", "offline_map_lat", "offline_map_lon", "offline_map_span", "offline_map_follow", "theme_mode", "theme_day_hour", "theme_night_hour", "light_theme_index", "dark_theme_index", "theme", "accent_color", "brand_text", "badge_text", "brand_color", "badge_color", "widget_left", "widget_right", "home_clock_style", "solar_manual", "solar_lat", "solar_lon",
                 "custom_revision", "home_wallpaper", "wallpaper_home_v2", "glass_cards", "weather_enabled", "weather_age_days", "weather_fahrenheit", "flip_gradients", "split", "spacing",
                 "dock", "dock_order", "dock_items", "dock_mono", "dock_labels", "dock_icons", "text",
                 "projection", "media", "clock24", "layout_left", "layout_right", "layout_apps"

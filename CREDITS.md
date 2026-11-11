@@ -11,3 +11,7 @@ Dark adaptations of the MIT-licensed 720pixel free-gradient-tools palette. See [
 ## Simple Icons
 
 See [SIMPLE-ICONS-ATTRIBUTION.txt](SIMPLE-ICONS-ATTRIBUTION.txt) and the notices in `assets/`. Individual icons and brand marks can carry additional licensing or trademark restrictions.
+
+## Offline maps
+
+[Mapsforge 0.25.0](https://github.com/mapsforge/mapsforge/tree/0.25.0), LGPL-3.0 with the Mapsforge linking exception; AndroidSVG 1.4, Apache-2.0. Offline map data © OpenStreetMap contributors, ODbL 1.0. The bundled world overview is unmodified and dates to 2016-02-20. Full notices, license texts, source links and the map checksum are included in `assets/notices/`.

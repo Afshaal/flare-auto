@@ -17,6 +17,9 @@ import java.util.Date
 import java.util.Locale
 
 class ScreenSaverActivity : Activity() {
+    private val environments = ArrayList<EnvironmentInfo>()
+    private var music:SaverMusic?=null
+    private var banners: SaverBanners? = null
     private var clock: TextView? = null
     private var date: TextView? = null
     private var box: LinearLayout? = null
@@ -31,6 +34,7 @@ class ScreenSaverActivity : Activity() {
             val minute = now.time / 60000
             if (minute != lastMinute) {
                 lastMinute = minute
+                environments.forEach { it.updateSolar() }
                 val step = (minute % 9).toInt()
                 box?.translationX = dp((step % 3 - 1) * 4).toFloat()
                 box?.translationY = dp((step / 3 - 1) * 4).toFloat()
@@ -50,11 +54,29 @@ class ScreenSaverActivity : Activity() {
         window.setBackgroundDrawable(ColorDrawable(theme.background))
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
-        preferences = getSharedPreferences("home", 0)
+        preferences = ProfileStore.preferences(this)
         val root = FrameLayout(this)
         root.setOnClickListener { finish() }
         root.background = WallpaperPack.saver(this, theme)
-        if (preferences.getString("saver_mode", "clock") == "image") {
+        val imageMode = preferences.getString("saver_mode", "clock") == "image"
+        val slots=ArrayList<LinearLayout>()
+        for(left in listOf(true,false)) {
+            val info=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL;gravity=if(left) Gravity.START else Gravity.END }
+            val fallback=if(left) { if(preferences.getBoolean("saver_weather",false) && preferences.getBoolean("saver_solar",false)) "both" else if(preferences.getBoolean("saver_weather",false)) "weather" else if(preferences.getBoolean("saver_solar",false)) "sun" else "off" } else "off"
+            val mode=preferences.getString(if(left) "saver_slot_left" else "saver_slot_right",fallback)
+            if(!imageMode || preferences.getBoolean("saver_image_info",false)) {
+                for(kind in when(mode) { "both"->listOf("auto","sun");"weather"->listOf("auto");"sun"->listOf("sun");else->emptyList() }) {
+                    val row=LinearLayout(this).apply { gravity=Gravity.CENTER_VERTICAL }
+                    val icon=SolarIcon(this,theme.textSecondary);val label=TextView(this).apply { setTextColor(theme.textSecondary) }
+                    row.addView(icon,LinearLayout.LayoutParams(dp(28),dp(28)));row.addView(label,LinearLayout.LayoutParams(-2,dp(36)).apply { leftMargin=dp(8) });info.addView(row)
+                    environments.add(EnvironmentInfo(this,label,icon,kind))
+                }
+            }
+            slots.add(info);root.addView(info,FrameLayout.LayoutParams(-2,-2,Gravity.TOP or if(left) Gravity.START else Gravity.END).apply { topMargin=dp(20);leftMargin=dp(24);rightMargin=dp(24) })
+        }
+        banners=SaverBanners(this,root) { left,hidden->slots[if(left) 0 else 1].visibility=if(hidden) View.INVISIBLE else View.VISIBLE }
+        if(preferences.getBoolean("saver_music_banner",false)) music=SaverMusic(this) { pkg,title,artist->banners?.song(pkg,title,artist) }
+        if (imageMode) {
             setContentView(root)
             return
         }
@@ -99,7 +121,11 @@ class ScreenSaverActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        if (box != null) {
+        window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
+        banners?.start()
+        music?.start()
+        environments.forEach { it.start() }
+        if (box != null || environments.isNotEmpty()) {
             clockFormat = SimpleDateFormat(
                 if (preferences.getBoolean("clock24", false)) "HH:mm" else "h:mm",
                 Locale.getDefault()
@@ -112,10 +138,21 @@ class ScreenSaverActivity : Activity() {
 
     override fun onPause() {
         handler.removeCallbacks(tick)
+        music?.stop()
+        banners?.stop()
+        environments.forEach { it.stop() }
         super.onPause()
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
+    }
+
     override fun onDestroy() {
+        music?.stop()
+        banners?.stop()
+        environments.forEach { it.stop() }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

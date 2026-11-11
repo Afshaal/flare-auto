@@ -54,7 +54,7 @@ class AppPickerActivity : Activity() {
             setBackgroundColor(ui.t.background)
             isFocusableInTouchMode = true
         }
-        root.addView(ui.header("Choose app"), LinearLayout.LayoutParams(-1, ui.dp(56)))
+        root.addView(ui.header(if (role == "banners") "Notification apps · tap to toggle" else "Choose app"), LinearLayout.LayoutParams(-1, ui.dp(56)))
         val search = EditText(this).apply {
             setSingleLine()
             hint = "Search apps"
@@ -76,6 +76,15 @@ class AppPickerActivity : Activity() {
         adapter = Adapter()
         grid.adapter = adapter
         grid.setOnItemClickListener { _, _, position, _ ->
+            if (role == "banners") {
+                val pkg = ComponentName.unflattenFromString(visible[position].target)?.packageName ?: return@setOnItemClickListener
+                val prefs = ProfileStore.preferences(this)
+                val allowed = prefs.getStringSet("saver_banner_apps", emptySet())!!.toMutableSet()
+                if (!allowed.add(pkg)) allowed.remove(pkg)
+                prefs.edit().putStringSet("saver_banner_apps", allowed).apply()
+                adapter.notifyDataSetChanged()
+                return@setOnItemClickListener
+            }
             val data = Intent().putExtra(ROLE, role).putExtra(TARGET, visible[position].target)
             setResult(RESULT_OK, data)
             finish()
@@ -96,7 +105,7 @@ class AppPickerActivity : Activity() {
             )
             Collections.sort(apps, ResolveInfo.DisplayNameComparator(packageManager))
             val result = ArrayList<Entry>()
-            result.add(Entry(if (role == "startup") "Do not open an app" else "Use launcher default", ""))
+            if (role != "banners") result.add(Entry(if (role == "startup") "Do not open an app" else "Use launcher default", ""))
             for (resolveInfo in apps) {
                 val target = ComponentName(
                     resolveInfo.activityInfo.packageName,
@@ -174,7 +183,7 @@ class AppPickerActivity : Activity() {
                 }
             }
             cell.findViewById<TextView>(android.R.id.text1).text =
-                entry.label + if (entry.target == current) " ✓" else ""
+                entry.label + if (if (role == "banners") ProfileStore.preferences(this@AppPickerActivity).getStringSet("saver_banner_apps", emptySet())!!.contains(ComponentName.unflattenFromString(entry.target)?.packageName) else entry.target == current) " ✓" else ""
             return cell
         }
     }

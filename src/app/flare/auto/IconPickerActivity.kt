@@ -183,7 +183,7 @@ class IconPickerActivity : Activity() {
     }
 
     private fun save(item: Item, color: Int?) {
-        val edit: SharedPreferences.Editor = getSharedPreferences("home", 0).edit()
+        val edit: SharedPreferences.Editor = ProfileStore.preferences(this).edit()
             .putString("icon_override_$packageNameToEdit", item.res)
             .remove("icon_image_$packageNameToEdit")
         if (color == null) edit.remove("icon_color_$packageNameToEdit") else edit.putInt("icon_color_$packageNameToEdit", color)

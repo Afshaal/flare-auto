@@ -42,7 +42,7 @@ internal object IconPacks {
 
     @JvmStatic
     fun name(context: Context): String {
-        val packageName = context.getSharedPreferences("home", 0).getString(KEY, "") ?: ""
+        val packageName = ProfileStore.preferences(context).getString(KEY, "") ?: ""
         if (packageName.isEmpty()) return "Simple Icons"
         return try {
             context.packageManager.getApplicationLabel(
@@ -98,7 +98,7 @@ internal object IconPacks {
 
     @JvmStatic
     fun load(context: Context): Pack? {
-        val packageName = context.getSharedPreferences("home", 0).getString(KEY, "") ?: ""
+        val packageName = ProfileStore.preferences(context).getString(KEY, "") ?: ""
         if (packageName.isEmpty()) return null
         return try {
             val resources = context.packageManager.getResourcesForApplication(packageName)

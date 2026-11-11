@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rendertheme xmlns="http://mapsforge.org/renderTheme" version="6" map-background="#151b22" map-background-outside="#10171d">
+    <rule e="way" k="natural" v="water|sea|bay"><area fill="#142e3c"/></rule>
+    <rule e="way" k="natural" v="land|nosea|wood|scrub|grassland"><area fill="#203329"/></rule>
+    <rule e="way" k="landuse" v="forest|grass|meadow|recreation_ground"><area fill="#203329"/></rule>
+    <rule e="way" k="landuse" v="residential|commercial|industrial"><area fill="#242c33"/></rule>
+    <rule e="way" k="waterway" v="*"><line stroke="#24576e" stroke-width="1.2"/></rule>
+    <rule e="way" k="building" v="*" zoom-min="15"><area fill="#343b42" stroke="#454c53" stroke-width="0.4"/></rule>
+    <rule e="way" k="highway" v="motorway|trunk|motorway_link|trunk_link"><line stroke="#273441" stroke-width="3"/><line stroke="#c7a775" stroke-width="2"/><pathText k="name" font-size="11" fill="#f1f4f7" stroke="#151b22" stroke-width="2"/></rule>
+    <rule e="way" k="highway" v="primary|secondary|primary_link|secondary_link"><line stroke="#202a33" stroke-width="2.5"/><line stroke="#849aa8" stroke-width="1.5"/><pathText k="name" font-size="11" fill="#f1f4f7" stroke="#151b22" stroke-width="2"/></rule>
+    <rule e="way" k="highway" v="tertiary|residential|unclassified|service|living_street" zoom-min="12"><line stroke="#586773" stroke-width="0.6"/><pathText k="name" font-size="10" fill="#c9d2da" stroke="#151b22" stroke-width="2"/></rule>
+    <rule e="node" k="place" v="city|town|village"><caption k="name" font-size="13" font-style="bold" fill="#eef2f5" stroke="#151b22" stroke-width="2"/></rule>
+    <rule e="way" k="boundary" v="administrative"><line stroke="#62707e" stroke-width="0.6" stroke-dasharray="5,5"/></rule>
+</rendertheme>

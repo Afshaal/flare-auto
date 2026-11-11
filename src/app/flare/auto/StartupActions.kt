@@ -22,9 +22,10 @@ internal class StartupActions(
     fun checkBoot() {
         val id = bootId()
         if (id.isEmpty()) return
-        val previous = prefs.getString("startup_last_boot", "") ?: ""
+        val device = activity.applicationContext.getSharedPreferences("startup_device", 0)
+        val previous = device.getString("startup_last_boot", prefs.getString("startup_last_boot", "")) ?: ""
         if (id == previous) return
-        prefs.edit().putString("startup_last_boot", id).apply()
+        device.edit().putString("startup_last_boot", id).apply()
         if (previous.isEmpty()) return
         val source = prefs.getString("startup_source", "none") ?: "none"
         val app = prefs.getString("startup_app", "") ?: ""

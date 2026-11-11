@@ -13,7 +13,7 @@ import java.util.Locale
 internal class Forecast(context: Context, private val updated: () -> Unit) {
     private val app = context.applicationContext
     private val cache = app.getSharedPreferences("forecast_cache", 0)
-    private val home = app.getSharedPreferences("home", 0)
+    private val home = ProfileStore.preferences(app)
     @Volatile private var active = false
     @Volatile private var generation = 0
     private var parsedRaw: String? = null
@@ -57,7 +57,7 @@ internal class Forecast(context: Context, private val updated: () -> Unit) {
             val result = download(lat, lon, now)
             main.post {
                 val listeners = requests.complete(key).filter { (listener, token) -> listener.active && listener.generation == token }
-                val settings = appContext.getSharedPreferences("home", 0)
+                val settings = ProfileStore.preferences(appContext)
                 if (result != null && listeners.isNotEmpty() && settings.getBoolean("weather_enabled", false)) {
                     appContext.getSharedPreferences("forecast_cache", 0).edit().putString("data", result)
                         .putLong("fetched", System.currentTimeMillis()).putFloat("latitude", lat.toFloat()).putFloat("longitude", lon.toFloat()).apply()

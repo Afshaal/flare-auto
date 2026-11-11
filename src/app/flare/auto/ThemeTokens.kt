@@ -26,16 +26,20 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
             intArrayOf(0xffe1e8ec.toInt(), 0xfff2f7fa.toInt(), 0xffbecbd4.toInt(), 0xff202c34.toInt(), 0xff5e707d.toInt(), 0xff32647d.toInt())
         )
 
+        fun preview(p:android.content.SharedPreferences):ThemeTokens {
+            val index=NAMES.indexOf(p.getString("theme",NAMES[0])).coerceAtLeast(0)
+            return ThemeTokens(VALUES[index],p.getInt("accent_color",VALUES[index][5]))
+        }
         private var cached: ThemeTokens? = null
         private var cachedMinute = -1L
         private var cachedIndex = -1
 
-        fun mode(context: Context): String = context.getSharedPreferences("home", 0).getString("theme_mode", "dark") ?: "dark"
+        fun mode(context: Context): String = ProfileStore.preferences(context).getString("theme_mode", "dark") ?: "dark"
 
         fun activeIndex(context: Context): Int = effectiveIndex(context)
 
         private fun effectiveIndex(context: Context): Int {
-            val prefs = context.getSharedPreferences("home", 0)
+            val prefs = ProfileStore.preferences(context)
             val light = when (mode(context)) {
                 "light" -> true
                 "auto" -> {
@@ -52,13 +56,14 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
 
         @JvmStatic
         fun index(context: Context): Int {
-            val name = context.getSharedPreferences("home", 0).getString("theme", NAMES[0])
+            val name = ProfileStore.preferences(context).getString("theme", NAMES[0])
             return NAMES.indexOf(name).takeIf { it >= 0 } ?: 0
         }
 
         @JvmStatic
         @Synchronized
         fun get(context: Context): ThemeTokens {
+            if(context is EditorContext) return preview(context.draft)
             val minute = System.currentTimeMillis() / 60000
             if (cached != null && cachedMinute == minute) return cached!!
             val selected = effectiveIndex(context)
@@ -68,7 +73,7 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
             val values = VALUES[selected]
             return ThemeTokens(
                 values,
-                context.getSharedPreferences("home", 0).getInt("accent_color", values[5])
+                ProfileStore.preferences(context).getInt("accent_color", values[5])
             ).also { cached = it }
         }
 
@@ -81,7 +86,7 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
         @JvmStatic
         @Synchronized
         fun select(context: Context, index: Int) {
-            context.getSharedPreferences("home", 0).edit()
+            ProfileStore.preferences(context).edit()
                 .putString("theme", NAMES[Math.floorMod(index, NAMES.size)])
                 .putInt(if (index >= 5) "light_theme_index" else "dark_theme_index", index)
                 .putString("theme_mode", if (mode(context) == "auto") "auto" else if (index >= 5) "light" else "dark")

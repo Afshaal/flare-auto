@@ -20,6 +20,7 @@ class SettingsActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var root: LinearLayout
     private val refreshers = ArrayList<() -> Unit>()
+    private var offlineMaps:OfflineMapPanel?=null
     private lateinit var updater: UpdateChecker
     private val sections = LinkedHashMap<String, LinearLayout>()
     private val navigation = LinkedHashMap<String, TextView>()
@@ -32,7 +33,8 @@ class SettingsActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
-        prefs = getSharedPreferences("home", 0)
+        if(intent.getStringExtra("category")=="OFFLINE MAPS") selectedCategory="OFFLINE MAPS"
+        prefs = ProfileStore.preferences(this)
         updater = UpdateChecker(this)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ThemeTokens.get(this).background))
         render()
@@ -41,12 +43,15 @@ class SettingsActivity : Activity() {
     override fun onResume() {
         super.onResume()
         if (::updater.isInitialized) updater.onResume()
+        offlineMaps?.resume()
         if (::root.isInitialized) {
             if (ui.t !== ThemeTokens.get(this)) ui.recolor(root)
             refreshValues()
             updateNavigation()
         }
     }
+
+    override fun onPause() { offlineMaps?.pause();super.onPause() }
 
     override fun onDestroy() {
         if (::updater.isInitialized) updater.dispose()
@@ -77,7 +82,7 @@ class SettingsActivity : Activity() {
             body.addView(navScroll, LinearLayout.LayoutParams(ui.dp(190), -1))
             val nav = ui.column().apply { setPadding(ui.dp(12), ui.dp(8), ui.dp(8), ui.dp(16)) }
             navScroll.addView(nav)
-            val names = arrayOf("APPEARANCE", "PERSONALIZATION", "SCREENSAVER", "STARTUP", "APPLICATION SHORTCUTS", "PERMISSIONS", "DEVICE", "ABOUT")
+            val names = arrayOf("APPEARANCE", "PERSONALIZATION", "SCREENSAVER", "OFFLINE MAPS", "STARTUP", "APPLICATION SHORTCUTS", "PERMISSIONS", "DEVICE", "ABOUT")
             names.forEach { name ->
                 val item = ui.text(categoryName(name), 14, ui.t.textSecondary).apply {
                     minHeight = ui.dp(48)
@@ -143,11 +148,36 @@ class SettingsActivity : Activity() {
 
         group = section("HOME")
         row(group, "Accent color", accentName()) { chooseAccent() }
-        row(group, "Customize home screen", "") { startActivity(Intent(this, CustomizeActivity::class.java)) }
+        row(group, "Customize home screen", "") { startActivity(Intent(this, GridEditorActivity::class.java)) }
         toggle(group, "24-hour clock", "clock24", false)
         toggle(group, "Keep display active", "awake", true)
 
         group = section("SCREENSAVER")
+        for(left in listOf(true,false)) {
+            val key=if(left) "saver_slot_left" else "saver_slot_right"
+            row(group,if(left) "Top-left information" else "Top-right information",prefs.getString(key,"off") ?: "off") {
+                ThemedDialogs.Builder(this).setTitle("Corner information").setItems(arrayOf("None","Weather","Sunrise / sunset","Both")) { _,i->
+                    prefs.edit().putString(key,arrayOf("off","weather","sun","both")[i]).apply();refreshValues()
+                }.show()
+            }
+        }
+        toggle(group,"Song-change banner","saver_music_banner",false)
+        toggle(group, "Information over image wallpaper", "saver_image_info", false)
+        toggle(group, "Notification banners", "saver_banners", false)
+        toggle(group, "Hide notification contents", "saver_banner_private", true)
+        row(group, "Notification apps", "Choose allowed apps") {
+            startActivity(Intent(this, AppPickerActivity::class.java).putExtra(AppPickerActivity.ROLE, "banners"))
+        }
+        row(group, "Notification access", if (mediaAllowed()) "Allowed" else "Enable") {
+            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+        }
+        row(group, "Banner position", prefs.getString("saver_banner_position", "left") ?: "left") {
+            ThemedDialogs.Builder(this).setTitle("Banner position").setItems(arrayOf("Top left", "Top right", "Alternate corners")) { _, i ->
+                prefs.edit().putString("saver_banner_position",arrayOf("left","right","alternate")[i]).apply(); refreshValues()
+            }.show()
+        }
+        step(group, "Banner duration (seconds)", "saver_banner_seconds", 2, 15, 5, 1)
+        step(group, "Banner size (%)", "saver_banner_size", 85, 120, 100, 5)
         row(group, "Display mode", saverModeName()) { chooseSaverMode() }
         row(group, "Screensaver wallpaper", WallpaperPack.name(this, true)) { appearance("saver") }
         toggleSaverFlip(group)
@@ -170,7 +200,11 @@ class SettingsActivity : Activity() {
         toggle(group, "Show date", "saver_date", true)
         toggle(group, "Show vehicle label", "saver_civic", true)
 
+        group = section("OFFLINE MAPS")
+        offlineMaps=OfflineMapPanel(this,ui,group)
+
         group = section("STARTUP")
+        row(group, "Driver profiles", "Choose driver & startup behavior") { startActivity(Intent(this, ProfilesActivity::class.java)) }
         row(group, "Launch application", startupName()) {
             startActivityForResult(
                 Intent(this, AppPickerActivity::class.java)
@@ -249,13 +283,16 @@ class SettingsActivity : Activity() {
         }
         row(group, "Version", version, null)
         row(group, "Check for updates", "GitHub") { updater.check() }
-        row(group, "Open-source credits", "Dashline · gradients") {
+        row(group, "Open-source credits", "Dashline · maps · icons") {
             ThemedDialogs.Builder(this)
                 .setTitle("Open-source credits")
                 .setMessage(
                     "Dashline MediaMonitor: GPL-3.0-only.\n" +
                         "Gradient palette: 720pixel free-gradient-tools, MIT license.\n" +
-                        "See the included gradient attribution file."
+                        "Mapsforge 0.25.0: LGPL-3.0 with linking exception.\n" +
+                        "AndroidSVG 1.4: Apache-2.0.\n" +
+                        "Map data: © OpenStreetMap contributors, ODbL 1.0.\n" +
+                        "See the included attribution and license files."
                 )
                 .setPositiveButton("Close", null)
                 .show()
@@ -329,6 +366,10 @@ class SettingsActivity : Activity() {
         refreshers.add {
             val value = when (name) {
                 "Color mode" -> ThemeTokens.mode(this)
+                "Banner position" -> prefs.getString("saver_banner_position", "left") ?: "left"
+                "Top-left information" -> prefs.getString("saver_slot_left","off") ?: "off"
+                "Top-right information" -> prefs.getString("saver_slot_right","off") ?: "off"
+                "Notification access" -> if (mediaAllowed()) "Allowed" else "Enable"
                 "Theme" -> ThemeTokens.NAMES[ThemeTokens.activeIndex(this)]
                 "Home scale" -> scaleName("ui_scale_home")
                 "App drawer scale" -> scaleName("ui_scale_drawer")
@@ -627,6 +668,7 @@ class SettingsActivity : Activity() {
     @Deprecated("Deprecated in Android")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if(requestCode==OfflineMapPanel.PICK_MAP && resultCode==RESULT_OK) { data?.data?.let { OfflineMapStore.importMap(this,it) };return }
         if (requestCode == PICK && resultCode == RESULT_OK && data != null) {
             val role = data.getStringExtra(AppPickerActivity.ROLE)
             val target = data.getStringExtra(AppPickerActivity.TARGET)

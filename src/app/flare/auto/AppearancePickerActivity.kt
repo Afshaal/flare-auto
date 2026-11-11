@@ -28,7 +28,7 @@ class AppearancePickerActivity : Activity() {
         val isTheme = mode == "theme"
         val isSaver = mode == "saver"
         val isDrawer = mode == "drawer"
-        val preferences = getSharedPreferences("home", 0)
+        val preferences = ProfileStore.preferences(this)
         names = when {
             isTheme -> ThemeTokens.NAMES
             isDrawer -> arrayOf("Theme background", "Match Home") + WallpaperPack.HOME_NAMES
@@ -156,7 +156,7 @@ class AppearancePickerActivity : Activity() {
         val isSaver = mode == "saver"
         val role = if (isDrawer) "drawer" else if (isSaver) "saverwall" else "home"
         CustomImages.importImage(this, data.data!!, role) {
-            val preferences = getSharedPreferences("home", 0)
+            val preferences = ProfileStore.preferences(this)
             val editor = preferences.edit()
                 .putInt("custom_revision", preferences.getInt("custom_revision", 0) + 1)
             editor.apply()

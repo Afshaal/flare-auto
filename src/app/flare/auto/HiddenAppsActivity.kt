@@ -34,7 +34,7 @@ class HiddenAppsActivity : Activity() {
         window.setBackgroundDrawable(ColorDrawable(ThemeTokens.get(this).background))
         window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
         ui = UiKit(this)
-        preferences = getSharedPreferences("home", 0)
+        preferences = ProfileStore.preferences(this)
         hidden = HashSet(preferences.getStringSet("hidden_apps", Collections.emptySet()) ?: emptySet())
         val root = ui.column().apply { setBackgroundColor(ui.t.background) }
         root.addView(ui.header("Hidden apps"), LinearLayout.LayoutParams(-1, ui.dp(56)))

@@ -1,0 +1,1 @@
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android" android:minWidth="100dp" android:minHeight="60dp" android:initialLayout="@android:layout/simple_list_item_1" android:configure="app.flare.auto.WidgetProbeConfig" android:resizeMode="horizontal|vertical" android:widgetCategory="home_screen" android:updatePeriodMillis="0" />

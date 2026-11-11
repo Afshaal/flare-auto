@@ -40,7 +40,7 @@ class CustomizeActivity : Activity() {
         window.decorView.systemUiVisibility = UiFlags.IMMERSIVE
         ui = UiKit(this)
         window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(ui.t.background))
-        preferences = getSharedPreferences("home", 0)
+        preferences = ProfileStore.preferences(this)
         previewContext = UiScale.wrap(this, "ui_scale_home")
         left = HomeActivity.card(preferences, true)
         right = HomeActivity.card(preferences, false)
@@ -130,7 +130,7 @@ class CustomizeActivity : Activity() {
         divider.setOnTouchListener { view, event -> drag(view, event) }
         rightBox = cardBox(right, false)
         content.addView(rightBox, LinearLayout.LayoutParams(0, -1, (100 - split).toFloat()))
-        appsButton.visibility = if (left == "apps" || right == "apps") View.VISIBLE else View.GONE
+        appsButton.visibility = if (left == "apps" || right == "apps" || DashboardPages.decode(preferences.getString(DashboardPages.KEY, null)).orEmpty().any { page -> page.any { it.type == "apps" } }) View.VISIBLE else View.GONE
         updateHint()
         renderDock()
         renderedSettings = preferences.all

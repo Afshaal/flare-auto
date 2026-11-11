@@ -24,6 +24,7 @@ internal class HomeCards(
     private val prefs: SharedPreferences,
     private val theme: ThemeTokens,
     private val preview: Boolean = false,
+    private val sampleData: Boolean = false,
     private val context: Context = activity,
     private val onTarget: (String) -> Unit = {},
     private val onProjection: (Array<String>) -> Unit = {},
@@ -41,6 +42,7 @@ internal class HomeCards(
     private val white = theme.textPrimary
     private val muted = theme.textSecondary
     val environments = ArrayList<EnvironmentInfo>()
+    val maps = ArrayList<OfflineMapCard>()
     var playbackButton: ImageView? = null
     var sourceLabel: TextView? = null
     var mediaAccessHint: TextView? = null
@@ -123,18 +125,48 @@ internal class HomeCards(
         return pill
     }
 
-    fun build(content: LinearLayout, card: String) {
+    fun build(content: LinearLayout, card: String, compact: Boolean = false) {
         when (card) {
-            "clock" -> buildClockCard(content)
-            "media" -> buildMediaCard(content)
+            "clock", "clock_only", "clock_minimal" -> buildClockCard(content, compact, card)
+            "projection" -> buildProjectionCard(content)
+            "media", "media_wide", "media_compact" -> buildMediaCard(content, compact || card != "media", card == "media_compact")
+            "weather", "weather_solar" -> buildWeatherCard(content,card=="weather_solar")
             "apps" -> buildAppCard(content)
+            "offline_map" -> { val map=OfflineMapCard(activity,context,sampleData);maps.add(map);content.addView(map,LinearLayout.LayoutParams(0,-1,1f)) }
+            else ->if(HostedWidgets.id(card)!=null) content.addView(HostedWidgets.view(activity,context,card,preview),LinearLayout.LayoutParams(0,-1,1f))
         }
         if (preview) environments.forEach { it.updateSolar() }
+    }
+
+    private fun buildWeatherCard(content:LinearLayout,both:Boolean) {
+        val box=column().apply { gravity=Gravity.CENTER; background=shape(panel,12); pad(this,16,12) }
+        content.addView(box,LinearLayout.LayoutParams(0,-1,1f))
+        for(mode in if(both) listOf("auto","sun") else listOf("auto")) {
+            val row=row().apply { gravity=Gravity.CENTER }
+            val icon=SolarIcon(context,muted); val label=text("",18,white,false)
+            row.addView(icon,LinearLayout.LayoutParams(dp(38),dp(38))); row.addView(label)
+            box.addView(row);if(sampleData) { label.text=if(mode=="sun") "06:24 AM" else "28°";icon.setWeather(if(mode=="sun") null else 2) } else environments.add(EnvironmentInfo(context,label,icon,mode))
+        }
+    }
+
+    private fun buildProjectionCard(content:LinearLayout) {
+        val card=row().apply { background=shape(panel,12); pad(this,10,8); gravity=Gravity.CENTER }
+        content.addView(card,LinearLayout.LayoutParams(0,-1,1f))
+        card.addView(projectionButton("CarPlay","ic_carplay_mark") { launchFirst(arrayOf("com.shihab.diplay","com.shihab.diplay.hudtest")) },LinearLayout.LayoutParams(0,dp(56),1f).apply { rightMargin=dp(5) })
+        card.addView(projectionButton("Android Auto","ic_android_auto_mark") { launchFirst(arrayOf("com.andrerinas.headunitrevived")) },LinearLayout.LayoutParams(0,dp(56),1f).apply { leftMargin=dp(5) })
     }
 
     private fun buildAppCard(content: LinearLayout) {
         val card = column().apply { background = shape(panel, 12) }
         content.addView(card, LinearLayout.LayoutParams(0, -1, 1f))
+        card.setOnLongClickListener { activity.startActivity(Intent(activity,AppWidgetActivity::class.java)); true }
+        val apps = try { JSONArray(prefs.getString("layout_apps", "[]")) } catch (_: Exception) { JSONArray() }
+        if (apps.length() == 0) {
+            card.addView(text("+\nAdd application shortcuts",16,theme.textSecondary,false).apply {
+                gravity=Gravity.CENTER; setOnClickListener { activity.startActivity(Intent(activity,AppWidgetActivity::class.java)) }
+            },LinearLayout.LayoutParams(-1,-1))
+            return
+        }
         val grid = android.widget.GridLayout(context).apply { columnCount = 4 }
         card.addView(grid, LinearLayout.LayoutParams(-1, -1))
         try {
@@ -171,7 +203,7 @@ internal class HomeCards(
         }
     }
 
-    private fun buildClockCard(content: LinearLayout) {
+    private fun buildClockCard(content: LinearLayout, compact: Boolean, kind: String) {
         val card = column().apply {
             pad(this, 22, 12)
             background = shape(panel, 12)
@@ -196,19 +228,20 @@ internal class HomeCards(
             holder.addView(solarIcon, LinearLayout.LayoutParams(dp(24), dp(38)))
             holder.addView(solar, LinearLayout.LayoutParams(-2, dp(38)).apply { leftMargin = dp(5) })
             val info = EnvironmentInfo(context, solar, solarIcon, kind)
-            environments.add(info)
+            if(sampleData) { solar.text=if(kind=="sun") "06:24 AM" else "28°";solarIcon.setWeather(if(kind=="sun") null else 2) } else environments.add(info)
             return holder
         }
         badges.addView(widget(leftWidget, false), LinearLayout.LayoutParams(0, dp(38), 1f))
         badges.addView(widget(rightWidget, true), LinearLayout.LayoutParams(0, dp(38), 1f))
-        card.addView(badges, LinearLayout.LayoutParams(-1, dp(38)))
-        if (environments.isEmpty()) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
+        if (kind != "clock_minimal") card.addView(badges, LinearLayout.LayoutParams(-1, dp(38)))
+        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
 
         val center = column().apply { gravity = Gravity.CENTER }
         card.addView(center, LinearLayout.LayoutParams(-1, 0, 1f))
         val brand = prefs.getString("brand_text", "CIVIC") ?: "CIVIC"
         center.addView(text(brand, 13, prefs.getInt("brand_color", theme.accent), true).apply {
-            visibility = if (brand.isEmpty()) View.GONE else View.VISIBLE
+            visibility = if (brand.isEmpty() || kind == "clock_minimal") View.GONE else View.VISIBLE
+            if (compact) { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END }
             letterSpacing = .35f
             includeFontPadding = false
             gravity = Gravity.CENTER
@@ -229,6 +262,7 @@ internal class HomeCards(
             LinearLayout.LayoutParams(dp(68), dp(2)).apply { topMargin = dp(3); bottomMargin = dp(5) })
 
         val projection = row().apply {
+            if (kind != "clock") visibility = View.GONE
             gravity = Gravity.CENTER
             setPadding(dp(12), 0, dp(12), 0)
             minimumHeight = dp(56)
@@ -248,11 +282,11 @@ internal class HomeCards(
         )
     }
 
-    private fun buildMediaCard(content: LinearLayout) {
+    private fun buildMediaCard(content: LinearLayout, compact: Boolean, controlsOnly:Boolean=false) {
         val right = column()
         content.addView(right, LinearLayout.LayoutParams(0, -1, 1f))
         val audio = column().apply {
-            pad(this, 20, 14)
+            pad(this, 16, 10)
             background = shape(panel, 12)
         }
         right.addView(audio, LinearLayout.LayoutParams(-1, 0, 1f))
@@ -262,11 +296,12 @@ internal class HomeCards(
         }
         audio.addView(sourceLabel, LinearLayout.LayoutParams(-1, -2))
         mediaAccessHint = text("Enable media access", 12, theme.accent, false).apply {
+            if (preview) visibility = View.GONE
             gravity = Gravity.CENTER
             setOnClickListener { activity.startActivity(Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS")) }
         }
         audio.addView(mediaAccessHint, LinearLayout.LayoutParams(-1, -2))
-        val metadata = column().apply { gravity = Gravity.CENTER }
+        val metadata = (if (compact) row() else column()).apply { gravity = Gravity.CENTER }
         audio.addView(metadata, LinearLayout.LayoutParams(-1, 0, 1f))
         albumArt = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
@@ -277,8 +312,9 @@ internal class HomeCards(
             clipToOutline = true
         }
         val artArea = FrameLayout(context)
-        metadata.addView(artArea, LinearLayout.LayoutParams(-1, 0, 1f))
-        artArea.addView(albumArt, FrameLayout.LayoutParams(dp(160), dp(160), Gravity.CENTER))
+        if(controlsOnly) artArea.visibility=View.GONE
+        metadata.addView(artArea, if (compact) LinearLayout.LayoutParams(0, -1, .42f) else LinearLayout.LayoutParams(-1, 0, 1f))
+        artArea.addView(albumArt, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
         val cardArt = albumArt!!
         artArea.addOnLayoutChangeListener { _, left, top, rightEdge, bottom, oldLeft, oldTop, oldRight, oldBottom ->
             val size = maxOf(1, minOf(rightEdge - left, bottom - top) - dp(10))
@@ -290,9 +326,9 @@ internal class HomeCards(
                 }
             }
         }
-        val labels = column().apply { setPadding(0, dp(4), 0, dp(6)) }
-        metadata.addView(labels, LinearLayout.LayoutParams(-1, -2))
-        trackTitle = text("No media playing", 18, white, true).apply {
+        val labels = column().apply { setPadding(0, dp(2), 0, dp(3)); if (compact) gravity = Gravity.CENTER }
+        metadata.addView(labels, if (compact) LinearLayout.LayoutParams(0, -1, .58f) else LinearLayout.LayoutParams(-1, -2))
+        trackTitle = text("No media playing", 16, white, true).apply {
             isSingleLine = true
             ellipsize = android.text.TextUtils.TruncateAt.MARQUEE
             marqueeRepeatLimit = -1
@@ -300,7 +336,7 @@ internal class HomeCards(
             gravity = Gravity.CENTER
         }
         labels.addView(trackTitle)
-        trackArtist = text("", 13, muted, false).apply {
+        trackArtist = text("", 12, muted, false).apply {
             isSingleLine = true
             gravity = Gravity.CENTER
         }
@@ -317,7 +353,7 @@ internal class HomeCards(
         seekRow!!.addView(progress, LinearLayout.LayoutParams(0, dp(40), 1f))
         seekRow!!.addView(total)
         seekRow!!.minimumHeight = dp(40)
-        audio.addView(seekRow)
+        (if (compact) labels else audio).addView(seekRow)
         progress!!.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, value: Int, fromUser: Boolean) = Unit
             override fun onStartTrackingTouch(seekBar: SeekBar) {
@@ -329,7 +365,7 @@ internal class HomeCards(
             }
         })
         val controls = row().apply { gravity = Gravity.CENTER; minimumHeight = dp(56) }
-        audio.addView(controls, LinearLayout.LayoutParams(-1, dp(56)))
+        (if (compact) labels else audio).addView(controls, LinearLayout.LayoutParams(-1, dp(56)))
         val cardSeek = seekRow!!
         val cardTitle = trackTitle!!
         audio.addOnLayoutChangeListener { _, left, _, rightEdge, _, oldLeft, _, oldRight, _ ->
@@ -356,11 +392,10 @@ internal class HomeCards(
 
     private fun updateMediaWidth(pixels: Int, controls: LinearLayout, cardSeek: LinearLayout, cardTitle: TextView) {
         val width = (pixels / resources.displayMetrics.density).toInt()
-        val narrow = width < 270
-        if (!preview) onNarrow(narrow)
-        cardSeek.visibility = if (!narrow && duration() > 0) View.VISIBLE else View.GONE
-        cardTitle.textSize = (if (width < 230) 14 else 18) * prefs.getInt("text", 100) / 100f
-        controls.visibility = if (width < 208) View.GONE else View.VISIBLE
+        if (!preview) onNarrow(false)
+        cardSeek.visibility = if (duration() > 0) View.VISIBLE else View.GONE
+        cardTitle.textSize = (if (width < 230) 14 else 16) * prefs.getInt("text", 100) / 100f
+        controls.visibility = View.VISIBLE
     }
 
 }

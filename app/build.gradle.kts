@@ -43,5 +43,8 @@ android {
 }
 
 dependencies {
+    implementation("com.graphhopper:graphhopper-core:1.0")
+    implementation("org.mapsforge:mapsforge-map-android:0.25.0")
+    implementation("org.mapsforge:mapsforge-themes:0.25.0")
     testImplementation("junit:junit:4.13.2")
 }

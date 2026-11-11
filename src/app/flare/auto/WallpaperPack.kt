@@ -18,7 +18,7 @@ internal object WallpaperPack {
     private const val KEY_DRAWER = "wallpaper_drawer_v2"
 
     private fun legacyIndex(context: Context, saver: Boolean): Int {
-        val p = context.getSharedPreferences("home", 0)
+        val p = ProfileStore.preferences(context)
         if (!saver) return when (p.getInt("home_wallpaper", 0)) {
             0 -> 0; 1 -> 2; 2 -> 3; 3 -> 4; 4 -> 5; 5 -> 6; 6 -> HOME_NAMES.lastIndex; else -> 0
         }
@@ -30,11 +30,11 @@ internal object WallpaperPack {
 
     fun select(context: Context, role: String, index: Int) {
         val key = when (role) { "saver" -> KEY_SAVER; "drawer" -> KEY_DRAWER; else -> KEY_HOME }
-        context.getSharedPreferences("home", 0).edit().putInt(key, index).apply()
+        ProfileStore.preferences(context).edit().putInt(key, index).apply()
     }
 
     fun drawerSelection(context: Context): Int {
-        val p = context.getSharedPreferences("home", 0)
+        val p = ProfileStore.preferences(context)
         if (p.contains(KEY_DRAWER)) return p.getInt(KEY_DRAWER, -2).coerceIn(-2, HOME_NAMES.lastIndex)
         return if (p.getBoolean("drawer_custom", false)) HOME_NAMES.lastIndex
             else if (p.getBoolean("drawer_wallpaper", false)) -1 else -2
@@ -61,7 +61,7 @@ internal object WallpaperPack {
 
     @JvmStatic
     fun index(context: Context, saver: Boolean): Int {
-        val prefs = context.getSharedPreferences("home", 0)
+        val prefs = ProfileStore.preferences(context)
         val key = if (saver) KEY_SAVER else KEY_HOME
         return if (prefs.contains(key)) prefs.getInt(key, 0).coerceIn(0, HOME_NAMES.lastIndex) else legacyIndex(context, saver)
     }
@@ -85,7 +85,7 @@ internal object WallpaperPack {
     }
 
     private fun flip(context: Context, role: String): Boolean {
-        val p = context.getSharedPreferences("home", 0)
+        val p = ProfileStore.preferences(context)
         return when (role) {
             "saver" -> p.getBoolean("saver_flip", p.getBoolean("flip_gradients", false))
             "drawer" -> p.getBoolean("drawer_flip", false)

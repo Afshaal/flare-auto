@@ -15,7 +15,7 @@ internal class EnvironmentInfo(
     private val icon: SolarIcon,
     private val displayMode: String = "auto"
 ) {
-    private val preferences = context.getSharedPreferences("home", 0)
+    private val preferences = ProfileStore.preferences(context)
     private val downloadedFormat by lazy { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT) }
     private var lastMinute = -1
     private var lastDay = -1
