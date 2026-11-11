@@ -136,7 +136,7 @@ internal class UpdateChecker(private val activity: Activity) {
 
     private fun requestInstall() {
         if (disposed || !update.isFile) return
-        if (Build.VERSION.SDK_INT >= 26 && !activity.packageManager.canRequestPackageInstalls()) {
+        if (!activity.packageManager.canRequestPackageInstalls()) {
             ThemedDialogs.Builder(activity).setTitle("Allow update installation")
                 .setMessage("Android needs permission to install the verified update. Return here after enabling it.")
                 .setPositiveButton("Open settings") { _, _ ->
@@ -155,7 +155,7 @@ internal class UpdateChecker(private val activity: Activity) {
     fun onResume() {
         if (awaitingPermission) {
             awaitingPermission = false
-            if (Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls()) requestInstall()
+            if (activity.packageManager.canRequestPackageInstalls()) requestInstall()
         }
     }
     private fun runWork(block: () -> Unit) {

@@ -10,6 +10,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.os.Build
 import android.view.View
 
 /**
@@ -51,7 +52,9 @@ internal abstract class StatusIcon(context: Context) : View(context) {
         val listener = object : BroadcastReceiver() {
             override fun onReceive(context: Context, intent: Intent) = refresh()
         }
-        context.registerReceiver(listener, broadcasts())
+        // These are system broadcasts; on Android 13+ keep receiving them as before (exported is the old default).
+        if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(listener, broadcasts(), Context.RECEIVER_EXPORTED)
+        else context.registerReceiver(listener, broadcasts())
         receiver = listener
         transport?.let { type ->
             val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? ConnectivityManager ?: return@let
