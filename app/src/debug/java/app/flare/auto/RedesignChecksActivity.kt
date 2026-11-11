@@ -78,7 +78,7 @@ class RedesignChecksActivity:Activity() {
                 val edit=registry.edit().clear();before.forEach { (k,v)->edit.putString(k,v.toString()) };edit.commit();ThemeTokens.invalidate()
             }
         }
-        java.io.File(filesDir,"phase2-model-results.json").writeText(results.toString(2));deleteSharedPreferences("phase2_model")
+        java.io.File(filesDir,"phase2-model-results.json").writeText(results.toString(2));android.util.Log.i("FlareChecks","Redesign "+results.toString());deleteSharedPreferences("phase2_model")
         if(intent.getStringExtra("screen")=="saver") {
             ProfileStore.preferences(this).edit().putBoolean("saver_music_banner",true).putString("saver_slot_left","weather").putString("saver_slot_right","sun")
                 .putBoolean("weather_enabled",false).putBoolean("solar_manual",true).putString("solar_lat","31.5497").putString("solar_lon","74.3436").apply()

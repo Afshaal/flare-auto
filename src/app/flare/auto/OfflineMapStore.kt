@@ -34,8 +34,10 @@ internal object OfflineMapStore {
     /** Changes whenever the map data changes, so Home can rebuild its map card. */
     fun revision(c:Context)=c.getSharedPreferences(DATA_PREFS,0).getLong(REVISION,0)
     private fun touch(c:Context)=c.getSharedPreferences(DATA_PREFS,0).edit().putLong(REVISION,System.currentTimeMillis()).apply()
+    /** Map to show: a downloaded region, else the navigation pack's map, else the bundled world overview. Worker thread. */
     fun ensure(c:Context):File {
         region(c).takeIf { it.isFile }?.let { return it }
+        (NavigationPack.status(c) as? NavigationPack.Status.Ready)?.pack?.map?.let { return it }
         val world=File(c.filesDir,"offline_maps/world.map")
         if(!world.isFile) {
             world.parentFile?.mkdirs()

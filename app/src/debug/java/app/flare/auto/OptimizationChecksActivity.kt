@@ -58,12 +58,18 @@ class OptimizationChecksActivity : Activity() {
                 check(CustomImages.iconRole("com.spotify.music") == "icon_" + java.security.MessageDigest.getInstance("SHA-256").digest("com.spotify.music".toByteArray()).joinToString("") { "%02x".format(it.toInt() and 255) })
             }
             run("old wallpaper selection and custom index preserved") {
-                prefs.edit().remove("wallpaper_saver_v2").putInt("saver_wallpaper", 20).commit()
-                check(WallpaperPack.index(this, true) == WallpaperPack.HOME_NAMES.lastIndex)
-                prefs.edit().putInt("saver_wallpaper", 17).commit()
-                check(WallpaperPack.name(this, true) == "Black to Burgundy")
+                // WallpaperPack reads the active driver's store, which is not "home" when a custom driver is active.
+                val active = ProfileStore.preferences(this)
+                val saved = HashMap(active.all)
+                try {
+                    active.edit().remove("wallpaper_saver_v2").putInt("saver_wallpaper", 20).commit()
+                    check(WallpaperPack.index(this, true) == WallpaperPack.CUSTOM_INDEX) { "index ${WallpaperPack.index(this, true)}" }
+                    active.edit().putInt("saver_wallpaper", 17).commit()
+                    check(WallpaperPack.name(this, true) == "Black to Burgundy") { "name ${WallpaperPack.name(this, true)}" }
+                } finally { restore(active, saved) }
             }
         } finally { restore(prefs, originalPrefs); restore(cache, originalCache) }
+        android.util.Log.i("FlareChecks", "Optimization " + results.joinToString(" | "))
         setContentView(TextView(this).apply { text = results.joinToString("\n"); textSize = 14f })
     }
 }

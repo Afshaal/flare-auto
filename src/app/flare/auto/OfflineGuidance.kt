@@ -9,7 +9,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.util.Locale
 
-internal class OfflineGuidance(private val a:Activity,c:Context,private val paintRoute:(NavRoute?)->Unit,private val center:()->Pair<Double,Double>) {
+/**
+ * Turn-by-turn panel shown over the full-screen offline map: destination search, route calculation, progress
+ * along the route from GPS fixes ([update]), off-route recalculation and optional offline spoken directions.
+ */
+internal class OfflineGuidance(private val a:Activity,c:Context,private val pack:NavigationPack.Pack,private val paintRoute:(NavRoute?)->Unit,private val center:()->Pair<Double,Double>) {
     private val p=ProfileStore.preferences(c)
     private val ui=UiKit(a).apply { t=ThemeTokens.get(c) }
     private val engine=OfflineRouting(c)
@@ -29,7 +33,8 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pain
     private var searchDialog:android.app.Dialog?=null
     private val etaFormat=java.text.SimpleDateFormat(if(p.getBoolean(Keys.CLOCK24,false)) "HH:mm" else "h:mm a",Locale.getDefault())
     private val title:TextView=ui.text("Search destination",16,ui.t.textPrimary).apply { maxLines=2;ellipsize=android.text.TextUtils.TruncateAt.END }
-    private val detail:TextView=ui.text("Lahore · offline driving",12,ui.t.textSecondary).apply { maxLines=2 }
+    private val idleDetail="${pack.region} · offline driving"
+    private val detail:TextView=ui.text(idleDetail,12,ui.t.textSecondary).apply { maxLines=2 }
     val view:LinearLayout=ui.column().apply {
         setPadding(ui.dp(12),ui.dp(8),ui.dp(12),ui.dp(8));background=GlassDrawable(ui.t.card,ui.dp(12).toFloat(),ui.t.cardBorder)
         addView(title);addView(detail);contentDescription="Offline navigation";minimumHeight=ui.dp(56)
@@ -45,14 +50,14 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pain
     init {
         if(p.getBoolean(Keys.OFFLINE_NAV_ACTIVE,false)) {
             val lat=p.getString(Keys.OFFLINE_NAV_LAT,"")?.toDoubleOrNull();val lon=p.getString(Keys.OFFLINE_NAV_LON,"")?.toDoubleOrNull()
-            if(lat!=null && lon!=null && NavigationPack.covers(lat,lon)) { target=OfflineDestinationPicker.Place(p.getString(Keys.OFFLINE_NAV_NAME,"Destination") ?: "Destination","saved",lat,lon);title.text="Waiting for GPS";detail.text=target?.name }
+            if(lat!=null && lon!=null && pack.covers(lat,lon)) { target=OfflineDestinationPicker.Place(p.getString(Keys.OFFLINE_NAV_NAME,"Destination") ?: "Destination","saved",lat,lon);title.text="Waiting for GPS";detail.text=target?.name }
         }
     }
     fun size(width:Int) { view.layoutParams?.width=width;title.maxWidth=width-ui.dp(24);detail.maxWidth=width-ui.dp(24) }
-    fun search() { searchDialog=OfflineDestinationPicker.show(a,::choose) }
+    fun search() { searchDialog=OfflineDestinationPicker.show(a,pack,::choose) }
     fun choose(place:OfflineDestinationPicker.Place) {
         if(closed) return
-        if(!NavigationPack.covers(place.lat,place.lon)) { title.text="Outside Lahore driving coverage";return }
+        if(!pack.covers(place.lat,place.lon)) { title.text="Outside ${pack.region} driving coverage";return }
         fun begin(lat:Double,lon:Double,asPreview:Boolean) {
             target=place;route=null;paintRoute(null);p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();calculate(lat,lon,asPreview)
         }
@@ -121,7 +126,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pain
         }
     }
     private fun speak(text:String) { if(p.getBoolean(Keys.OFFLINE_NAV_VOICE,true)) { if(!voiceReady) pendingSpeech=text;initVoice();if(voiceReady) voice?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"flare-navigation") } }
-    fun stopRoute() { engine.close();route=null;target=null;calculating=false;p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();paintRoute(null);voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null;title.text="Search destination";detail.text="Lahore · offline driving" }
+    fun stopRoute() { engine.close();route=null;target=null;calculating=false;p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();paintRoute(null);voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null;title.text="Search destination";detail.text=idleDetail }
     fun close() { closed=true;searchDialog?.dismiss();searchDialog=null;pendingSpeech=null;engine.close();voice?.stop();voice?.shutdown();voice=null;voiceReady=false }
     private fun summary(metres:Double,millis:Long):String {
         val minutes=maxOf(1,(millis/60000).toInt());val eta=etaFormat.format(java.util.Date(System.currentTimeMillis()+millis))

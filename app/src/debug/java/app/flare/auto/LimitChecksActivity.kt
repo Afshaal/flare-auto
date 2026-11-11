@@ -70,6 +70,7 @@ class LimitChecksActivity : Activity() {
                 deferred.setBounds(0, 0, 16, 16); deferred.draw(Canvas(bitmap))
                 check(bitmap.getPixel(8, 8) == Color.RED)
             }
+            android.util.Log.i("FlareChecks", "Limit " + results.joinToString(" | "))
             output.text = results.joinToString("\n")
         }, 500)
     }

@@ -35,6 +35,11 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     private var started=false
     private var generation=0
     private var follow=true
+    /** Receives every GPS fix (used by the navigation panel on the full-screen map). */
+    var onLocation:((Location)->Unit)?=null
+    private var route:NavRoute?=null
+    private var routeLayer:org.mapsforge.map.layer.overlay.Polyline?=null
+    private var lastCenter=LatLong(0.0,0.0)
     private var manager:LocationManager?=null
     private val label=TextView(c).apply { gravity=Gravity.CENTER;setTextColor(t.textSecondary);textSize=15f }
     private val main=android.os.Handler(android.os.Looper.getMainLooper())
@@ -89,6 +94,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             val lat=p.getString(Keys.OFFLINE_MAP_LAT,"")?.toDoubleOrNull()?.takeIf { it.isFinite() && it in -85.0..85.0 } ?: center.latitude
             val lon=p.getString(Keys.OFFLINE_MAP_LON,"")?.toDoubleOrNull()?.takeIf { it.isFinite() && it in -180.0..180.0 } ?: center.longitude
             val requested=LatLong(lat,lon)
+            lastCenter=requested
             view.setCenter(if(bounds!!.contains(requested)) requested else center);view.setZoomLevelMax(if(overview) 5 else 19)
             view.post { if(map===view) {
                 val metresPerPixel=p.getInt(Keys.OFFLINE_MAP_SPAN,10).coerceIn(2,200)*1000.0/view.width.coerceAtLeast(1)
@@ -111,6 +117,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
                 setOnClickListener { follow=true;marker?.position?.let { view.setCenter(it) } ?: view.setCenter(LatLong(lat,lon)) }
             }
             val side=(40*resources.displayMetrics.density).toInt();addView(recenter,LayoutParams(side,side,Gravity.TOP or Gravity.RIGHT))
+            drawRoute()
             follow=p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true)
             if(context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)==android.content.pm.PackageManager.PERMISSION_GRANTED) {
                 manager=context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
@@ -123,6 +130,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     }
     override fun onLocationChanged(location:Location) {
         if(!location.latitude.isFinite() || !location.longitude.isFinite() || location.longitude !in -180.0..180.0) return
+        onLocation?.invoke(location)
         val view=map ?: return
         val point=LatLong(location.latitude.coerceIn(-85.0,85.0),location.longitude)
         if(bounds?.contains(point)==false) { statusLine?.text="© OpenStreetMap contributors · GPS outside saved coverage";return }
@@ -140,8 +148,30 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     fun stop() {
         started=false;generation++
         try { manager?.removeUpdates(this) } catch(_:RuntimeException) { };manager=null
-        map?.destroyAll();map=null;marker=null;bounds=null;statusLine=null
+        map?.destroyAll();map=null;marker=null;routeLayer=null;bounds=null;statusLine=null
         removeAllViews();if(label.parent==null) addView(label,LayoutParams(MATCH,MATCH));label.visibility=View.VISIBLE
     }
-    companion object { private var initialized=false }
+    /** Shows [path] as a line under the position marker, or removes it (null). Survives map reloads. */
+    fun showRoute(path:NavRoute?) { route=path;drawRoute() }
+    private fun drawRoute() {
+        val view=map ?: return
+        val layers=view.layerManager.layers
+        routeLayer?.let { layers.remove(it) };routeLayer=null
+        val path=route ?: return
+        val stroke=AndroidGraphicFactory.INSTANCE.createPaint().apply {
+            color=ROUTE_COLOR;strokeWidth=6*resources.displayMetrics.density
+            setStyle(org.mapsforge.core.graphics.Style.STROKE);setStrokeCap(org.mapsforge.core.graphics.Cap.ROUND);setStrokeJoin(org.mapsforge.core.graphics.Join.ROUND)
+        }
+        val line=org.mapsforge.map.layer.overlay.Polyline(stroke,AndroidGraphicFactory.INSTANCE)
+        line.setPoints(List(path.points.size/2) { LatLong(path.points[it*2],path.points[it*2+1]) })
+        val below=marker?.let { layers.indexOf(it) } ?: -1
+        if(below>=0) layers.add(below,line) else layers.add(line)
+        routeLayer=line
+    }
+    /** Current map centre (or the configured centre before the map has opened). */
+    fun center():Pair<Double,Double> = (map?.model?.mapViewPosition?.center ?: lastCenter).let { it.latitude to it.longitude }
+    companion object {
+        private var initialized=false
+        private const val ROUTE_COLOR=0xcc39bed8.toInt()
+    }
 }
