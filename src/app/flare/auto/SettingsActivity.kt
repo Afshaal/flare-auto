@@ -14,6 +14,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.animation.PathInterpolator
 import android.widget.EditText
@@ -106,6 +107,9 @@ class SettingsActivity : Activity() {
                     minHeight = ui.dp(48)
                     setPadding(ui.dp(14), 0, ui.dp(8), 0)
                     setOnClickListener { showCategory(name, true) }
+                    gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                    compoundDrawablePadding = ui.dp(12)
+                    setCompoundDrawablesRelative(SettingsGlyph(name, this).apply { setBounds(0, 0, ui.dp(20), ui.dp(20)) }, null, null, null)
                 }
                 navigation[name] = item
                 nav.addView(item, LinearLayout.LayoutParams(MATCH, ui.dp(48)).apply { bottomMargin = ui.dp(4) })

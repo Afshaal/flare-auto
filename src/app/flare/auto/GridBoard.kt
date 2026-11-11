@@ -36,20 +36,24 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
     private var selected = -1; private var resizing = false; private var seek = false
     private var candidate: GridTile? = null
     init { setWillNotDraw(false) }
+    /** Tile edges come from shared grid lines, so cards that meet the same line line up to the pixel. */
+    private val gap get() = Math.round(density * 4)
+    private fun line(size: Int, index: Int, count: Int) = Math.round(size * index / count.toFloat())
     override fun onMeasure(ws: Int, hs: Int) {
         val w = MeasureSpec.getSize(ws); val h = MeasureSpec.getSize(hs)
         setMeasuredDimension(w, h)
         for (i in 0 until childCount) {
             val t = tiles.getOrNull(i) ?: continue
-            getChildAt(i).measure(MeasureSpec.makeMeasureSpec((w * t.w / 8 - density * 8).toInt().coerceAtLeast(1), MeasureSpec.EXACTLY),
-                MeasureSpec.makeMeasureSpec((h * t.h / 6 - density * 8).toInt().coerceAtLeast(1), MeasureSpec.EXACTLY))
+            val width = line(w, t.x + t.w, 8) - line(w, t.x, 8) - 2 * gap
+            val height = line(h, t.y + t.h, 6) - line(h, t.y, 6) - 2 * gap
+            getChildAt(i).measure(MeasureSpec.makeMeasureSpec(width.coerceAtLeast(1), MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height.coerceAtLeast(1), MeasureSpec.EXACTLY))
         }
     }
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        val gap = (density * 4).toInt()
         for (i in 0 until childCount) {
             val tile = tiles.getOrNull(i) ?: continue
-            val child = getChildAt(i); val x = width * tile.x / 8 + gap; val y = height * tile.y / 6 + gap
+            val child = getChildAt(i); val x = line(width, tile.x, 8) + gap; val y = line(height, tile.y, 6) + gap
             child.layout(x, y, x + child.measuredWidth, y + child.measuredHeight)
         }
     }

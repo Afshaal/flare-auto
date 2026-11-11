@@ -209,7 +209,7 @@ internal class HomeCards(
         }
         badges.addView(corner(prefs.getString(Keys.WIDGET_LEFT, "auto") ?: "auto", false), LinearLayout.LayoutParams(0, dp(38), 1f))
         badges.addView(corner(prefs.getString(Keys.WIDGET_RIGHT, "trim") ?: "trim", true), LinearLayout.LayoutParams(0, dp(38), 1f))
-        if (kind != "clock_minimal") card.addView(badges, LinearLayout.LayoutParams(MATCH, dp(38)))
+        card.addView(badges, LinearLayout.LayoutParams(MATCH, dp(38)))
         // Home dims after sunset from the first environment; keep one even when no corner shows solar data.
         if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
 

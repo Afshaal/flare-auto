@@ -28,7 +28,7 @@ internal class CardFrame(context: Context, private val child: View, type: String
         val h = MeasureSpec.getSize(hs)
         setMeasuredDimension(w, h)
         scale = if (native) 1f else minOf(1f, w / minW, h / minH).coerceAtLeast(.01f)
-        child.measure(MeasureSpec.makeMeasureSpec((w / scale).toInt(), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec((h / scale).toInt(), MeasureSpec.EXACTLY))
+        child.measure(MeasureSpec.makeMeasureSpec(kotlin.math.ceil(w / scale).toInt(), MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(kotlin.math.ceil(h / scale).toInt(), MeasureSpec.EXACTLY))
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {

@@ -15,7 +15,7 @@ import android.graphics.drawable.Drawable
 import kotlin.math.min
 
 internal class MediaGlyph(private val kind: String, private val color: Int) : Drawable() {
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { this.color = color }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { color = this@MediaGlyph.color }
     /** Fixed per kind: built once. "pause" uses rectangles only. */
     private val path = Path().apply {
         when (kind) {

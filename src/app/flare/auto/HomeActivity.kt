@@ -221,7 +221,6 @@ class HomeActivity : Activity() {
     private fun buildTopBar() {
         val top = HomeChrome.TopBar(this, prefs, theme)
         date = top.date
-        date.setOnLongClickListener { startActivity(Intent(this, ProfilesActivity::class.java)); true }
         root.addView(top)
         root.addView(View(this).apply { background = HomeChrome.accent(theme) }, LinearLayout.LayoutParams(MATCH, dp(1)))
     }
@@ -249,16 +248,6 @@ class HomeActivity : Activity() {
                 board
             }, { next -> currentPage = next; build() })
             content.addView(strip, LinearLayout.LayoutParams(MATCH, MATCH))
-            if (pages.size > 1) {
-                val dots = TextView(this).apply {
-                    text = pages.indices.joinToString("  ") { if (it == currentPage) "●" else "○" }
-                    setTextColor(theme.textSecondary)
-                    textSize = 13 * prefs.textScale
-                    gravity = Gravity.CENTER
-                    contentDescription = "Page ${currentPage + 1} of ${pages.size}"
-                }
-                root.addView(dots, LinearLayout.LayoutParams(MATCH, dp(28)))
-            }
             return
         }
 
