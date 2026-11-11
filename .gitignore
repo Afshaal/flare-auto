@@ -16,3 +16,12 @@ local.properties
 Thumbs.db
 
 /.kotlin/
+
+# APK signature sidecars, IDE files, offline navigation pack data (built by flare-lahore-tools)
+*.idsig
+.idea/
+*.iml
+/captures/
+*.osm.pbf
+*.ghz
+/navigation-pack/
