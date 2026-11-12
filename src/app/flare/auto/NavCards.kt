@@ -88,13 +88,16 @@ internal class TurnCard(context: Context, private val compact: Boolean) : Linear
 }
 
 /**
- * Trip summary: arrival time, remaining travel time and distance. Full map: a card with three columns, a star for
- * the destination and an end button; Home widget ([compact]): one centred line.
+ * Trip summary: arrival time, remaining travel time and distance. Full map: a compact card with three equal,
+ * centred columns (value above its label: "11:58 / arrival", "16 / min", "15 / km"), a star for the destination and
+ * an End button; Home widget ([compact]): one centred line.
  */
 internal class TripCard(context: Context, private val compact: Boolean) : LinearLayout(context) {
-    private val eta = value(if (compact) 15f else 24f)
-    private val time = value(if (compact) 15f else 24f)
-    private val distance = value(if (compact) 15f else 24f)
+    private val eta = value(if (compact) 15f else 21f)
+    private val time = value(if (compact) 15f else 21f)
+    private val distance = value(if (compact) 15f else 21f)
+    private val timeUnit = label("min")
+    private val distanceUnit = label("km")
     /** Full map only: star the destination ([onStar]) and end navigation ([onEnd]). */
     val star: ImageView? = if (compact) null else ImageView(context)
     private val starIcon = MapIcon("star", NavColors.TEXT)
@@ -109,24 +112,31 @@ internal class TripCard(context: Context, private val compact: Boolean) : Linear
             setPadding(context.dp(14), context.dp(6), context.dp(14), context.dp(6))
             addView(eta); addView(dot()); addView(time); addView(dot()); addView(distance)
         } else {
-            setPadding(context.dp(16), context.dp(10), context.dp(8), context.dp(10))
-            addView(column(eta, "arrival"), LayoutParams(WRAP, WRAP))
-            addView(column(time, "remaining"), LayoutParams(WRAP, WRAP).apply { leftMargin = context.dp(20) })
-            addView(column(distance, "distance"), LayoutParams(WRAP, WRAP).apply { leftMargin = context.dp(20) })
-            val size = context.dp(48)
+            setPadding(context.dp(6), context.dp(6), context.dp(8), context.dp(6))
+            // Lighter values than before (regular weight instead of bold); every value shrinks to fit its column.
+            for (v in listOf(eta, time, distance)) {
+                v.typeface = Typeface.create("sans-serif", Typeface.NORMAL)
+                v.gravity = Gravity.CENTER
+                v.setAutoSizeTextTypeUniformWithConfiguration(12, 21, 1, android.util.TypedValue.COMPLEX_UNIT_SP)
+            }
+            val columnWidth = context.dp(62)
+            addView(column(eta, label("arrival")), LayoutParams(columnWidth, WRAP))
+            addView(column(time, timeUnit), LayoutParams(columnWidth, WRAP))
+            addView(column(distance, distanceUnit), LayoutParams(columnWidth, WRAP))
+            val size = context.dp(40)
             star!!.apply {
                 setImageDrawable(starIcon); contentDescription = "Save destination"
-                val p = context.dp(12); setPadding(p, p, p, p)
+                val p = context.dp(10); setPadding(p, p, p, p)
                 setOnClickListener { onStar?.invoke() }
             }
-            addView(star, LayoutParams(size, size).apply { leftMargin = context.dp(14) })
+            addView(star, LayoutParams(size, size).apply { leftMargin = context.dp(4) })
             val end = TextView(context).apply {
-                text = "End"; textSize = 15f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(NavColors.TEXT)
+                text = "End"; textSize = 13f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(NavColors.TEXT)
                 gravity = Gravity.CENTER; contentDescription = "End navigation"
-                background = GradientDrawable().apply { setColor(NavColors.END); cornerRadius = context.dp(20).toFloat() }
+                background = GradientDrawable().apply { setColor(NavColors.END); cornerRadius = context.dp(16).toFloat() }
                 setOnClickListener { onEnd?.invoke() }
             }
-            addView(end, LayoutParams(context.dp(68), context.dp(40)).apply { leftMargin = context.dp(4); rightMargin = context.dp(4) })
+            addView(end, LayoutParams(context.dp(52), context.dp(32)).apply { leftMargin = context.dp(4) })
         }
         visibility = View.GONE
     }
@@ -138,18 +148,32 @@ internal class TripCard(context: Context, private val compact: Boolean) : Linear
 
     private fun dot() = TextView(context).apply { text = "  ·  "; setTextColor(NavColors.MUTED); textSize = 15f }
 
-    private fun column(value: TextView, label: String) = LinearLayout(context).apply {
+    private fun label(text: String) = TextView(context).apply {
+        this.text = text; textSize = 12f; setTextColor(NavColors.MUTED); gravity = Gravity.CENTER; isSingleLine = true
+        includeFontPadding = false
+    }
+
+    /** Value above its label, both centred in the column. */
+    private fun column(value: TextView, label: TextView) = LinearLayout(context).apply {
         orientation = VERTICAL
-        addView(value, LayoutParams(WRAP, WRAP))
-        addView(TextView(context).apply { text = label; textSize = 12f; setTextColor(NavColors.MUTED) },
-            LayoutParams(WRAP, WRAP).apply { topMargin = context.dp(3) })
+        gravity = Gravity.CENTER_HORIZONTAL
+        addView(value, LayoutParams(MATCH, context.dp(26)))
+        addView(label, LayoutParams(MATCH, WRAP).apply { topMargin = context.dp(2) })
     }
 
     fun show(metres: Double, millis: Long, clock24: Boolean) {
-        eta.text = TripFormat.arrival(System.currentTimeMillis(), millis, clock24)
-        time.text = TripFormat.duration(millis)
-        distance.text = TripFormat.distance(metres)
-        contentDescription = "Arrival ${eta.text}, ${time.text}, ${distance.text}"
+        if (compact) {
+            eta.text = TripFormat.arrival(System.currentTimeMillis(), millis, clock24)
+            time.text = TripFormat.duration(millis)
+            distance.text = TripFormat.distance(metres)
+            contentDescription = "Arrival ${eta.text}, ${time.text}, ${distance.text}"
+        } else {
+            eta.text = TripFormat.clock(System.currentTimeMillis(), millis, clock24)
+            val (t, tu) = TripFormat.durationParts(millis)
+            val (d, du) = TripFormat.distanceParts(metres)
+            time.text = t; timeUnit.text = tu; distance.text = d; distanceUnit.text = du
+            contentDescription = "Arrival ${TripFormat.arrival(System.currentTimeMillis(), millis, clock24)}, $t $tu, $d $du"
+        }
         visibility = View.VISIBLE
     }
 

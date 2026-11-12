@@ -48,9 +48,16 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
                 when(i) { 0->{ p.edit().remove(Keys.OFFLINE_MAP_LAT).remove(Keys.OFFLINE_MAP_LON).apply();refresh() };1->useLocation();else->editCenter() }
             }.show()
         }
-        row("Map view span",{ "${p.getInt(Keys.OFFLINE_MAP_SPAN,10)} km" }) {
-            val values=intArrayOf(2,5,10,20,50,100,200)
-            ThemedDialogs.Builder(a).setTitle("Visible map area").setItems(values.map { "$it km across" }.toTypedArray()) { _,i->p.edit().putInt(Keys.OFFLINE_MAP_SPAN,values[i]).apply();refresh() }.show()
+        // 500 m and 1 km use "offline_map_span_m" and also store 2 km in "offline_map_span", so an older build
+        // swapped in over this one shows the closest span it knows; km choices clear the metres key.
+        row("Map view span",{ SettingsValues.mapSpan(p) }) {
+            val spans=SettingsValues.SPANS
+            ThemedDialogs.Builder(a).setTitle("Visible map area").setItems(spans.map { it.first }.toTypedArray()) { _,i->
+                val (_,km,metres)=spans[i]
+                val e=p.edit().putInt(Keys.OFFLINE_MAP_SPAN,km)
+                if(metres>0) e.putInt(Keys.OFFLINE_MAP_SPAN_METRES,metres) else e.remove(Keys.OFFLINE_MAP_SPAN_METRES)
+                e.apply();refresh()
+            }.show()
         }
         row("Other regions",{ regionValue() }) { regions() }
     }

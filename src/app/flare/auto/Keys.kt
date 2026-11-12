@@ -118,7 +118,10 @@ internal object Keys {
     const val OFFLINE_MAP_ENABLED = "offline_map_enabled"
     const val OFFLINE_MAP_LAT = "offline_map_lat"
     const val OFFLINE_MAP_LON = "offline_map_lon"
+    /** Map view span in km (2–200). Unchanged meaning; see [OFFLINE_MAP_SPAN_METRES]. */
     const val OFFLINE_MAP_SPAN = "offline_map_span"
+    /** Sub-kilometre map view span (500 or 1000 m). When set (> 0) it takes precedence over [OFFLINE_MAP_SPAN]. */
+    const val OFFLINE_MAP_SPAN_METRES = "offline_map_span_m"
     const val OFFLINE_MAP_FOLLOW = "offline_map_follow"
     const val OFFLINE_MAP_URL = "offline_map_url"
     /** Use the MapLibre vector map when the navigation pack has one (default on). */
@@ -141,7 +144,7 @@ internal object Keys {
 
     /** Keys whose change requires Home to be rebuilt the next time it resumes. */
     val HOME_UI: Set<String> = setOf(
-        DASHBOARD_PAGES, DASHBOARD_DEFAULT, OFFLINE_MAP_ENABLED, OFFLINE_MAP_LAT, OFFLINE_MAP_LON, OFFLINE_MAP_SPAN,
+        DASHBOARD_PAGES, DASHBOARD_DEFAULT, OFFLINE_MAP_ENABLED, OFFLINE_MAP_LAT, OFFLINE_MAP_LON, OFFLINE_MAP_SPAN, OFFLINE_MAP_SPAN_METRES,
         OFFLINE_MAP_FOLLOW, OFFLINE_MAP_VECTOR, THEME_MODE, THEME_DAY_HOUR, THEME_NIGHT_HOUR, LIGHT_THEME_INDEX, DARK_THEME_INDEX, THEME,
         ACCENT_COLOR, BRAND_TEXT, BADGE_TEXT, BRAND_COLOR, BADGE_COLOR, WIDGET_LEFT, WIDGET_RIGHT, HOME_CLOCK_STYLE,
         SOLAR_MANUAL, SOLAR_LAT, SOLAR_LON, CUSTOM_REVISION, LEGACY_HOME_WALLPAPER, WALLPAPER_HOME, GLASS_CARDS,

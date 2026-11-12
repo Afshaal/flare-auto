@@ -52,6 +52,17 @@ internal object SettingsValues {
         val minutes = p.getInt(Keys.SAVER_TIMEOUT, 0)
         return TIMEOUTS.indexOfFirst { if (seconds > 0) it.third == seconds else it.second == minutes && it.third == 0 }.coerceAtLeast(0)
     }
+    /** Visible map width in metres: "offline_map_span_m" (500 / 1000) when set, else "offline_map_span" km (2–200). */
+    fun mapSpanMetres(p: SharedPreferences): Int {
+        val metres = p.getInt(Keys.OFFLINE_MAP_SPAN_METRES, 0)
+        if (metres > 0) return metres.coerceIn(200, 2000)
+        return p.getInt(Keys.OFFLINE_MAP_SPAN, 10).coerceIn(2, 200) * 1000
+    }
+    fun mapSpan(p: SharedPreferences) = mapSpanMetres(p).let { if (it < 1000) "$it m" else "${it / 1000} km" }
+    /** Map view span choices: label, km ("offline_map_span"), metres ("offline_map_span_m", 0 = unset). */
+    val SPANS = listOf(Triple("500 m across", 2, 500), Triple("1 km across", 2, 1000)) +
+        listOf(2, 5, 10, 20, 50, 100, 200).map { Triple("$it km across", it, 0) }
+
     fun clockSize(p: SharedPreferences) = when (p.getInt(Keys.SAVER_SIZE, 120)) {
         96 -> "Small"
         140 -> "Large"

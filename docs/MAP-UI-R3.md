@@ -126,3 +126,17 @@ sunlight readability of the cards.
    is selected, check it still applies.
 7. Profile picker on startup: row centred, labels aligned.
 8. Screensaver at 15 s or 30 s if you want a shorter timeout (default remains your current setting).
+
+## maplibre-r4 (follow-up)
+
+`work/FlareAuto-v1.2.0-maplibre-r4.apk` — 31,438,294 bytes, SHA-256
+`6376c0cbe248a5e5df5c143b2f0975faca985e062f8ca88608b1859555f9b227`, same key, 1.2.0 / 4. Same pack (revision 4).
+
+* Trip card (full map): compact, three centred columns `11:58 / arrival`, `16 / min`, `15 / km` (metres under 1 km,
+  `1:05 / hr` from one hour), arrival without AM/PM, lighter values; star and a smaller End pill (D-43).
+* Settings › Offline maps › Map view span: 500 m and 1 km added (D-44).
+* GPS marker 23 dp (−28 %) on the widget and the full map (D-45).
+* Turn card offers "Stop navigation" while waiting for GPS (D-46).
+
+Tested in BlueStacks (debug drive and release): `r4-trip-card`, `r4-widget`, `r4-span` in screenshots/r3/; 61/61 unit
+tests, lint 0 errors, no crash. Navigation ended and span restored to 2 km after testing.

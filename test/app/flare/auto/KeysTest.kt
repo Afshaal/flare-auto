@@ -32,7 +32,9 @@ class KeysTest {
             "offline_nav_voice", "_editor_image",
             // 1.2.0 maplibre-r3: offline search places and the sub-minute screensaver timeout (new keys only).
             "offline_places_starred", "offline_places_recent", "offline_place_home", "offline_place_work",
-            "saver_timeout_seconds")
+            "saver_timeout_seconds",
+            // maplibre-r4: 500 m / 1 km map view span (new key only).
+            "offline_map_span_m")
         val values = constants().values
         assertEquals("a key constant was added, removed or renamed", expected, values.toSet())
         assertEquals("two constants share one key", values.size, values.toSet().size)
@@ -41,7 +43,7 @@ class KeysTest {
     @Test
     fun homeRebuildKeysAreRealKeys() {
         val all = constants().values.toSet()
-        assertEquals(48, Keys.HOME_UI.size)
+        assertEquals(49, Keys.HOME_UI.size)
         assertTrue(Keys.HOME_UI.minus(all).toString(), all.containsAll(Keys.HOME_UI))
         // Keys that change what Home draws must trigger a rebuild.
         for (key in listOf(Keys.DASHBOARD_PAGES, Keys.WALLPAPER_HOME, Keys.DOCK_ITEMS, Keys.TEXT, Keys.BRAND_TEXT, Keys.THEME_MODE))

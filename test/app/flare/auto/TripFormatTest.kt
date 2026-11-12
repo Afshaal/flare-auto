@@ -26,6 +26,15 @@ class TripFormatTest {
         val noon = 12 * 3600_000L
         assertEquals("12:25", TripFormat.arrival(noon, 25 * 60_000L, true, utc))
         assertEquals("12:25 PM", TripFormat.arrival(noon, 25 * 60_000L, false, utc))
+        // Full-map trip card: no AM/PM, 12/24-hour setting respected; value and unit separate.
+        assertEquals("11:58", TripFormat.clock(0, (23 * 60 + 58) * 60_000L, false, utc))
+        assertEquals("23:58", TripFormat.clock(0, (23 * 60 + 58) * 60_000L, true, utc))
+        assertEquals("16" to "min", TripFormat.durationParts(16 * 60_000L))
+        assertEquals("1:05" to "hr", TripFormat.durationParts(65 * 60_000L))
+        assertEquals("850" to "m", TripFormat.distanceParts(843.0))
+        assertEquals("1.0" to "km", TripFormat.distanceParts(960.0))
+        assertEquals("4.3" to "km", TripFormat.distanceParts(4280.0))
+        assertEquals("15" to "km", TripFormat.distanceParts(15200.0))
     }
 
     @Test

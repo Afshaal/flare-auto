@@ -71,6 +71,21 @@ internal object TripFormat {
     /** Arrival clock time for a trip of [millis] starting at [now]. */
     fun arrival(now:Long,millis:Long,clock24:Boolean,zone:java.util.TimeZone=java.util.TimeZone.getDefault()):String =
         java.text.SimpleDateFormat(if(clock24) "HH:mm" else "h:mm a",java.util.Locale.US).apply { timeZone=zone }.format(java.util.Date(now+millis))
+    /** Arrival clock time without AM/PM ("11:58" in 12-hour mode, "23:58" in 24-hour mode). */
+    fun clock(now:Long,millis:Long,clock24:Boolean,zone:java.util.TimeZone=java.util.TimeZone.getDefault()):String =
+        java.text.SimpleDateFormat(if(clock24) "HH:mm" else "h:mm",java.util.Locale.US).apply { timeZone=zone }.format(java.util.Date(now+millis))
+    /** Remaining time as value and unit for the trip card: "16" / "min", or "1:05" / "hr" from one hour. */
+    fun durationParts(millis:Long):Pair<String,String> {
+        val minutes=maxOf(1L,(millis+30000)/60000)
+        return if(minutes<60) "$minutes" to "min" else "${minutes/60}:${(minutes%60).toString().padStart(2,'0')}" to "hr"
+    }
+    /** Remaining distance as value and unit for the trip card: "850" / "m", "4.3" / "km", "15" / "km". */
+    fun distanceParts(metres:Double):Pair<String,String> = when {
+        metres<100 -> "${(metres/10).roundToInt()*10}" to "m"
+        metres<950 -> "${(metres/50).roundToInt()*50}" to "m"
+        metres<9950 -> String.format(java.util.Locale.US,"%.1f",metres/1000) to "km"
+        else -> "${(metres/1000).roundToInt()}" to "km"
+    }
     /** Road name for the turn card; long names are cut with "…" by the view, not here. Falls back to [text]. */
     fun road(step:NavStep):String = step.road.trim().ifEmpty { step.text.trim().replaceFirstChar { it.uppercaseChar() } }
 }

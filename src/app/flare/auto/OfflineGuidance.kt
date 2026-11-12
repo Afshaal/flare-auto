@@ -54,6 +54,11 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             if(preview && route!=null && target!=null) ThemedDialogs.Builder(a).setTitle("Route preview")
                 .setMessage("Start guidance to ${target?.name} from your GPS position?")
                 .setPositiveButton("Start") { _,_->target?.let { choose(it) } }.setNegativeButton("Cancel",null).show()
+            // A destination without a route yet (waiting for GPS, route unavailable): the trip card and its End
+            // button are hidden, so the turn card offers to stop.
+            else if(target!=null && route==null) ThemedDialogs.Builder(a).setTitle("Navigation")
+                .setMessage("Stop navigation to ${target?.name}?")
+                .setPositiveButton("Stop") { _,_->stopRoute() }.setNegativeButton("Cancel",null).show()
         }
         if(p.getBoolean(Keys.OFFLINE_NAV_ACTIVE,false)) {
             val lat=p.getString(Keys.OFFLINE_NAV_LAT,"")?.toDoubleOrNull();val lon=p.getString(Keys.OFFLINE_NAV_LON,"")?.toDoubleOrNull()

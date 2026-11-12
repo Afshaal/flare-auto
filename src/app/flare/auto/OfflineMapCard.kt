@@ -145,7 +145,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         val inside=pack.covers(lat0,lon0)
         val lat=if(inside) lat0 else (box[0]+box[2])/2;val lon=if(inside) lon0 else (box[1]+box[3])/2
         lastCenter=LatLong(lat,lon)
-        val zoom=VectorMapView.zoomForSpan(p.getInt(Keys.OFFLINE_MAP_SPAN,10).coerceIn(2,200),width.takeIf { it>0 } ?: resources.displayMetrics.widthPixels,lat)
+        val zoom=VectorMapView.zoomForSpan(SettingsValues.mapSpanMetres(p).toDouble(),width.takeIf { it>0 } ?: resources.displayMetrics.widthPixels,lat)
         val view=try {
             VectorMapView(context,pack.vector!!,box,org.maplibre.android.geometry.LatLng(lat,lon),zoom,!preview) { message ->
                 main.post { if(started && generation==token && vectorMap!=null) fallBack("3D map failed: $message") }
@@ -207,7 +207,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             lastCenter=requested
             view.setCenter(if(bounds!!.contains(requested)) requested else center);view.setZoomLevelMax(if(overview) 5 else 20)
             view.post { if(map===view) {
-                val metresPerPixel=p.getInt(Keys.OFFLINE_MAP_SPAN,10).coerceIn(2,200)*1000.0/view.width.coerceAtLeast(1)
+                val metresPerPixel=SettingsValues.mapSpanMetres(p)/view.width.coerceAtLeast(1).toDouble()
                 val z=if(overview && p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrBlank()) 2 else (ln(40075016.686*cos(Math.toRadians(lat))/(256*metresPerPixel))/ln(2.0)).roundToInt().coerceIn(2,if(overview) 5 else 19)
                 view.setZoomLevel(z.toByte())
             } }

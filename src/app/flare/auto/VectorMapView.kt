@@ -199,11 +199,11 @@ internal class VectorMapView(
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val r = size / 2f
         paint.color = 0x55000000
-        c.drawCircle(r, r + density * .7f, r - 1.5f * density, paint)
+        c.drawCircle(r, r + density * .6f, r - 1f * density, paint)
         paint.color = 0xffffffff.toInt()
-        c.drawCircle(r, r, r - 2 * density, paint)
+        c.drawCircle(r, r, r - 1.4f * density, paint)
         paint.color = MARKER_COLOR
-        c.drawCircle(r, r, r - 4 * density, paint)
+        c.drawCircle(r, r, r - 3f * density, paint)
         paint.color = 0xffffffff.toInt()
         if (arrow) {
             // The arrow fills most of the smaller disc so the direction stays readable at a glance.
@@ -233,8 +233,8 @@ internal class VectorMapView(
         /** Default following zoom: full map; the Home widget uses [WIDGET_FOLLOW_ZOOM] (smaller view, a bit wider). */
         const val FOLLOW_ZOOM = 17.4
         const val WIDGET_FOLLOW_ZOOM = 16.9
-        /** Vehicle marker diameter (was 44 dp). */
-        const val MARKER_DP = 32
+        /** Vehicle marker diameter (44 dp in r2, 32 dp in r3). */
+        const val MARKER_DP = 23
         private const val FOLLOW_MS = 950
 
         /** MapLibre needs OpenGL ES 3.0. */
@@ -243,9 +243,9 @@ internal class VectorMapView(
             return am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
         }
 
-        /** MapLibre zoom (512 px tiles) showing [km] across [widthPx] at [lat]. */
-        fun zoomForSpan(km: Int, widthPx: Int, lat: Double): Double {
-            val metresPerPixel = km * 1000.0 / widthPx.coerceAtLeast(1)
+        /** MapLibre zoom (512 px tiles) showing [metres] across [widthPx] at [lat]. */
+        fun zoomForSpan(metres: Double, widthPx: Int, lat: Double): Double {
+            val metresPerPixel = metres / widthPx.coerceAtLeast(1)
             return (Math.log(40075016.686 * Math.cos(Math.toRadians(lat)) / (512 * metresPerPixel)) / Math.log(2.0)).coerceIn(8.0, MAX_ZOOM - 0.5)
         }
     }

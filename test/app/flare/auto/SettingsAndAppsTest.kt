@@ -45,6 +45,12 @@ class SettingsAndAppsTest {
         assertEquals("Radio", SettingsValues.startupSource(TestPrefs(Keys.STARTUP_SOURCE to "radio")))
         assertEquals("100%", SettingsValues.scale(empty, Keys.UI_SCALE_HOME))
         assertEquals("None hidden", SettingsValues.hiddenApps(empty))
+        // Map view span: km values keep their meaning; the metres key (500 m / 1 km) wins when set.
+        assertEquals("10 km", SettingsValues.mapSpan(empty))
+        assertEquals(20_000, SettingsValues.mapSpanMetres(TestPrefs(Keys.OFFLINE_MAP_SPAN to 20)))
+        assertEquals("500 m", SettingsValues.mapSpan(TestPrefs(Keys.OFFLINE_MAP_SPAN to 2, Keys.OFFLINE_MAP_SPAN_METRES to 500)))
+        assertEquals("1 km", SettingsValues.mapSpan(TestPrefs(Keys.OFFLINE_MAP_SPAN to 2, Keys.OFFLINE_MAP_SPAN_METRES to 1000)))
+        assertEquals(9, SettingsValues.SPANS.size)
         assertEquals("2 hidden", SettingsValues.hiddenApps(TestPrefs(Keys.HIDDEN_APPS to setOf("a", "b"))))
         assertEquals("Theme default", SettingsValues.accent(empty))
         assertEquals("#E60012", SettingsValues.accent(TestPrefs(Keys.ACCENT_COLOR to 0xffe60012.toInt())))
