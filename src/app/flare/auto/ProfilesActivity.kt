@@ -27,18 +27,30 @@ class ProfilesActivity : Activity() {
         window.setBackgroundDrawable(GradientDrawable().apply { setColor(ui.t.card); cornerRadius=ui.dp(24).toFloat() })
         val root=ui.column().apply { setPadding(ui.dp(28),ui.dp(24),ui.dp(28),ui.dp(20)) }
         root.addView(ui.text("Who’s driving?",28,ui.t.textPrimary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(MATCH,ui.dp(52)))
+        // Every item (profiles and Add New) is one tile of the same width: an avatar-sized icon over a label slot of
+        // the same height, so icons and labels line up. The row is centred in the dialog and scrolls sideways when
+        // there are more profiles than fit.
         val choices=LinearLayout(this).apply { gravity=Gravity.CENTER }
-        val avatarSize=minOf(ui.dp(128),(resources.displayMetrics.heightPixels*.22f).toInt())
-        val scroll=android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false }
+        val avatarSize=minOf(ui.dp(112),(resources.displayMetrics.heightPixels*.20f).toInt())
+        val tileWidth=avatarSize+ui.dp(36)
+        val scroll=android.widget.HorizontalScrollView(this).apply { isHorizontalScrollBarEnabled=false; isFillViewport=true }
         var revealTile:View?=null
+        fun tile(icon:View,label:String,labelColor:Int,action:()->Unit):LinearLayout {
+            val tile=ui.column().apply {
+                gravity=Gravity.CENTER_HORIZONTAL; setPadding(0,ui.dp(10),0,ui.dp(6)); setOnClickListener { action() }
+                contentDescription=label
+            }
+            tile.addView(icon,LinearLayout.LayoutParams(avatarSize,avatarSize))
+            tile.addView(ui.text(label,18,labelColor).apply { gravity=Gravity.CENTER; maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END },
+                LinearLayout.LayoutParams(tileWidth-ui.dp(8),ui.dp(40)).apply { topMargin=ui.dp(8) })
+            choices.addView(tile,LinearLayout.LayoutParams(tileWidth,WRAP).apply { leftMargin=ui.dp(6); rightMargin=ui.dp(6) })
+            return tile
+        }
         fun choice(driver:ProfileStore.Driver,action:()->Unit) {
             val name=driver.name;val avatar=if(driver.id=="guest") 1 else driver.avatar;val active=ProfileStore.active(this)==driver.id
-            val tile=ui.column().apply { gravity=Gravity.CENTER; setPadding(ui.dp(16),ui.dp(12),ui.dp(16),ui.dp(8)); setOnClickListener { action() } }
-            tile.addView(ProfileAvatar(this,avatar,if(active) ui.t.accent else ui.t.textSecondary),LinearLayout.LayoutParams(avatarSize,avatarSize))
-            tile.addView(ui.text(name,18,ui.t.textPrimary).apply { gravity=Gravity.CENTER; maxLines=1; ellipsize=android.text.TextUtils.TruncateAt.END },LinearLayout.LayoutParams(avatarSize+ui.dp(24),ui.dp(40)))
-            if(driver.id!="default" && driver.id!="guest") tile.setOnLongClickListener { manageProfile(driver);true }
-            if(driver.id==reveal) revealTile=tile
-            choices.addView(tile)
+            val t=tile(ProfileAvatar(this,avatar,if(active) ui.t.accent else ui.t.textSecondary),name,ui.t.textPrimary,action)
+            if(driver.id!="default" && driver.id!="guest") t.setOnLongClickListener { manageProfile(driver);true }
+            if(driver.id==reveal) revealTile=t
         }
         ProfileStore.drivers(this).forEach { driver ->
             choice(driver) {
@@ -46,11 +58,10 @@ class ProfilesActivity : Activity() {
                 startActivity(Intent(this,HomeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)); finish()
             }
         }
-        val add=ui.text("+\nAdd New",24,ui.t.textSecondary).apply { gravity=Gravity.CENTER; setOnClickListener { createProfile(ui) } }
-        choices.addView(add,LinearLayout.LayoutParams(avatarSize+ui.dp(32),avatarSize+ui.dp(40)))
-        scroll.addView(choices)
+        tile(ProfileAvatar(this,ProfileAvatar.ADD,ui.t.textSecondary),"Add New",ui.t.textSecondary) { createProfile(ui) }
+        scroll.addView(choices,android.widget.FrameLayout.LayoutParams(WRAP,WRAP))
         root.addView(scroll,LinearLayout.LayoutParams(MATCH,WRAP))
-        revealTile?.let { tile->scroll.post { scroll.smoothScrollTo(tile.left,0) } }
+        revealTile?.let { t->scroll.post { scroll.smoothScrollTo(t.left,0) } }
         root.addView(ui.text("Hold a custom profile to edit or delete it",12,ui.t.textSecondary).apply { gravity=Gravity.CENTER },LinearLayout.LayoutParams(MATCH,ui.dp(32)))
         root.addView(ui.text("Startup selection",14,ui.t.textSecondary).apply {
             gravity=Gravity.CENTER; minHeight=ui.dp(40)

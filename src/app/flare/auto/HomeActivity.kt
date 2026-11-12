@@ -58,8 +58,8 @@ class HomeActivity : Activity() {
 
     private fun scheduleScreenOff() {
         handler.removeCallbacks(screenOff)
-        val minutes = prefs.getInt(Keys.SAVER_TIMEOUT, 0)
-        if (resumed && minutes > 0) handler.postDelayed(screenOff, minutes * 60_000L)
+        val delay = SettingsValues.timeoutMillis(prefs)
+        if (resumed && delay > 0) handler.postDelayed(screenOff, delay)
     }
 
     override fun onUserInteraction() {

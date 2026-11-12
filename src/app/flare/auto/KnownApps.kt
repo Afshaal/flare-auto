@@ -64,7 +64,10 @@ internal object KnownApps {
 
     fun hiddenFromDrawer(packageName: String) = packageName in LEGACY_HIDDEN
 
-    /** Drawer label, glyph and colour key for an installed app; glyph "original" means "no built-in glyph". */
+    /**
+     * Drawer label, glyph and colour key for an installed app. A built-in glyph is drawn for the stock head-unit
+     * screens and system tools; "original" means the app's own installed icon (or icon pack / custom icon).
+     */
     class Style(val label: String, val glyph: String, val color: String)
     fun drawerStyle(label: String, packageName: String): Style = when {
         label.equals("Basic Settings", ignoreCase = true) -> Style("WiFi Settings", "wifi", "wifi")
@@ -81,34 +84,6 @@ internal object KnownApps {
         label.equals("User Guide", true) -> Style(label, "guide", "guide")
         else -> Style(label, "original", "default")
     }
-
-    /** Simple Icons drawable for well-known packages. */
-    val BRAND_ICONS: Map<String, String> = mapOf(
-        "com.android.vending" to "si_googleplay",
-        "com.google.android.apps.photos" to "si_googlephotos",
-        "com.google.android.apps.docs" to "si_googledrive",
-        "com.google.android.gm" to "si_gmail",
-        "com.google.android.googlequicksearchbox" to "si_google",
-        "com.google.android.calendar" to "si_googlecalendar",
-        "com.apple.android.music" to "si_applemusic",
-        "deezer.android.app" to "si_deezer",
-        "com.aspiro.tidal" to "si_tidal",
-        "com.shazam.android" to "si_shazam",
-        "au.com.shiftyjelly.pocketcasts" to "si_pocketcasts",
-        "com.plexapp.android" to "si_plex",
-        "com.discord" to "si_discord",
-        "com.spotify.music" to "si_spotify",
-        "com.google.android.youtube" to "si_youtube",
-        "com.google.android.apps.youtube.music" to "si_youtubemusic",
-        "com.google.android.apps.maps" to "si_googlemaps",
-        "com.waze" to "si_waze",
-        "com.android.chrome" to "si_googlechrome",
-        "org.mozilla.firefox" to "si_firefox",
-        "com.whatsapp" to "si_whatsapp",
-        "org.telegram.messenger" to "si_telegram",
-        "com.netflix.mediaclient" to "si_netflix",
-        "org.videolan.vlc" to "si_vlcmediaplayer",
-        "com.soundcloud.android" to "si_soundcloud")
 
     /** Preference role ("app_<role>") that may redirect a stock screen to a user-chosen app. */
     fun overrideRole(screen: Screen): String = when (screen) {

@@ -123,7 +123,7 @@ class SettingsActivity : Activity() {
         setContentView(root)
 
         var group = section("APPEARANCE")
-        row(group, "Color mode", { ThemeTokens.mode(this) }) {
+        row(group, "Color mode", { SettingsValues.colorMode(prefs) }) {
             ThemedDialogs.Builder(this).setTitle("Color mode")
                 .setItems(arrayOf("Dark", "Light", "Automatic")) { _, selected ->
                     prefs.edit().putString(Keys.THEME_MODE, arrayOf("dark", "light", "auto")[selected]).apply()
@@ -200,9 +200,7 @@ class SettingsActivity : Activity() {
         row(group, "Display mode", { SettingsValues.saverMode(prefs) }) { chooseSaverMode() }
         row(group, "Screensaver wallpaper", { WallpaperPack.name(this, true) }) { appearance("saver") }
         toggleSaverFlip(group)
-        row(group, "Idle timeout", { SettingsValues.timeout(prefs) }) {
-            chooseInt("Idle timeout", arrayOf("Off", "1 minute", "5 minutes", "10 minutes", "15 minutes"), intArrayOf(0, 1, 5, 10, 15), Keys.SAVER_TIMEOUT, 0)
-        }
+        row(group, "Idle timeout", { SettingsValues.timeout(prefs) }) { chooseTimeout() }
         row(group, "Clock style", { ClockStyles.labels[SettingsValues.saverClockIndex(prefs)] }) {
             ThemedDialogs.Builder(this).setTitle("Screensaver clock style").setSingleChoiceItems(ClockStyles.labels, SettingsValues.saverClockIndex(prefs)) { _, selected ->
                 prefs.edit().putString(Keys.SAVER_CLOCK_STYLE, ClockStyles.ids[selected]).apply(); refreshValues()
@@ -278,7 +276,7 @@ class SettingsActivity : Activity() {
         val version = versionText()
         row(group, "Version", { version }, null)
         row(group, "Check for updates", { "GitHub" }) { updater.check() }
-        row(group, "Open-source credits", { "Dashline · maps · icons" }) {
+        row(group, "Open-source credits", { "Dashline · Maps · Routing" }) {
             ThemedDialogs.Builder(this)
                 .setTitle("Open-source credits")
                 .setMessage(Credits.SUMMARY)
@@ -435,6 +433,24 @@ class SettingsActivity : Activity() {
             }.setNegativeButton("Cancel", null).show()
     }
 
+    /**
+     * Idle timeout. Minute choices keep using "saver_timeout" (minutes) and clear the seconds key; 15 s / 30 s set
+     * "saver_timeout_seconds" and store 1 minute in "saver_timeout", so an older 1.2.0 build swapped in over this
+     * one falls back to the closest timeout it knows instead of "Off".
+     */
+    private fun chooseTimeout() {
+        val choices = SettingsValues.TIMEOUTS
+        ThemedDialogs.Builder(this).setTitle("Idle timeout")
+            .setSingleChoiceItems(choices.map { it.first }.toTypedArray(), SettingsValues.timeoutIndex(prefs)) { dialog, selected ->
+                dialog.dismiss()
+                val (_, minutes, seconds) = choices[selected]
+                val edit = prefs.edit().putInt(Keys.SAVER_TIMEOUT, minutes)
+                if (seconds > 0) edit.putInt(Keys.SAVER_TIMEOUT_SECONDS, seconds) else edit.remove(Keys.SAVER_TIMEOUT_SECONDS)
+                edit.apply()
+                refreshValues()
+            }.setNegativeButton("Cancel", null).show()
+    }
+
     private fun chooseStartupSource() {
         val names = arrayOf("System default", "Radio", "Bluetooth")
         val values = arrayOf("none", "radio", "bluetooth")
@@ -519,7 +535,7 @@ class SettingsActivity : Activity() {
     private fun chooseIconPack() {
         Background.load(this, {
             val packs = IconPacks.installed(this)
-            Pair(arrayOf("Simple Icons (default)") + packs.map { it.loadLabel(packageManager).toString() },
+            Pair(arrayOf("Installed icons (default)") + packs.map { it.loadLabel(packageManager).toString() },
                 arrayOf("") + packs.map { it.activityInfo.packageName })
         }) { (labels, ids) ->
             val current = ids.indexOf(prefs.getString(Keys.ICON_PACK, "") ?: "").coerceAtLeast(0)

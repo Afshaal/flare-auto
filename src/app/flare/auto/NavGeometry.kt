@@ -2,7 +2,8 @@ package app.flare.auto
 
 import kotlin.math.*
 
-internal data class NavStep(val text:String,val sign:Int,val at:Double)
+/** One instruction: [text] (spoken), GraphHopper [sign] (turn arrow), distance [at] along the route, [road] name. */
+internal data class NavStep(val text:String,val sign:Int,val at:Double,val road:String="")
 internal data class NavRoute(val points:DoubleArray,val cumulative:DoubleArray,val steps:List<NavStep>,val distance:Double,val millis:Long)
 internal object NavGeometry {
     data class Position(val segment:Int,val along:Double,val away:Double)
@@ -35,4 +36,41 @@ internal object NavGeometry {
         val nearby=scan((previous-15).coerceIn(0,count-2),(previous+160).coerceIn(0,count-2))
         return if(nearby.away<=100) nearby else scan(0,count-2)
     }
+    /**
+     * The part of [route] still ahead of a position [along] metres from the start on [segment] (from [nearest]):
+     * the snapped point followed by the remaining vertices, as lat,lon pairs. The whole route for along <= 0.
+     */
+    fun remaining(route:NavRoute,segment:Int,along:Double):DoubleArray {
+        val points=route.points;val count=points.size/2
+        if(count<2 || along<=0.0) return points
+        val i=segment.coerceIn(0,count-2)
+        val length=route.cumulative[i+1]-route.cumulative[i]
+        val t=if(length<=0.0) 0.0 else ((along-route.cumulative[i])/length).coerceIn(0.0,1.0)
+        val lat=points[i*2]+t*(points[i*2+2]-points[i*2]);val lon=points[i*2+1]+t*(points[i*2+3]-points[i*2+1])
+        val out=DoubleArray(2+(count-i-1)*2)
+        out[0]=lat;out[1]=lon
+        System.arraycopy(points,(i+1)*2,out,2,(count-i-1)*2)
+        return out
+    }
+}
+
+/** Text for the navigation cards; pure so it can be unit tested. */
+internal object TripFormat {
+    /** Distance to the next turn: "40 m", "350 m", "1.2 km", "12 km". */
+    fun distance(metres:Double):String = when {
+        metres<100 -> "${(metres/10).roundToInt()*10} m"
+        metres<1000 -> "${(metres/50).roundToInt()*50} m".let { if(it=="1000 m") "1.0 km" else it }
+        metres<10000 -> String.format(java.util.Locale.US,"%.1f km",metres/1000)
+        else -> "${(metres/1000).roundToInt()} km"
+    }
+    /** Remaining travel time: "1 min", "45 min", "1 h 05 min". */
+    fun duration(millis:Long):String {
+        val minutes=maxOf(1L,(millis+30000)/60000)
+        return if(minutes<60) "$minutes min" else "${minutes/60} h ${(minutes%60).toString().padStart(2,'0')} min"
+    }
+    /** Arrival clock time for a trip of [millis] starting at [now]. */
+    fun arrival(now:Long,millis:Long,clock24:Boolean,zone:java.util.TimeZone=java.util.TimeZone.getDefault()):String =
+        java.text.SimpleDateFormat(if(clock24) "HH:mm" else "h:mm a",java.util.Locale.US).apply { timeZone=zone }.format(java.util.Date(now+millis))
+    /** Road name for the turn card; long names are cut with "…" by the view, not here. Falls back to [text]. */
+    fun road(step:NavStep):String = step.road.trim().ifEmpty { step.text.trim().replaceFirstChar { it.uppercaseChar() } }
 }

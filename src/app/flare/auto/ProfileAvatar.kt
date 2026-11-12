@@ -8,6 +8,8 @@ internal class ProfileAvatar(c:Context,private val style:Int,private val color:I
     override fun onDraw(canvas:Canvas) {
         canvas.save(); val size=minOf(width,height).toFloat(); canvas.translate((width-size)/2,(height-size)/2); canvas.scale(size/48,size/48)
         p.color=color;p.style=Paint.Style.STROKE
+        // "Add New": a plus in a circle, drawn on the same 48-unit grid and size as the avatars.
+        if(style==ADD) { canvas.drawCircle(24f,24f,19f,p);canvas.drawLine(24f,15f,24f,33f,p);canvas.drawLine(15f,24f,33f,24f,p);canvas.restore();return }
         when(style%6) {
             0->{ canvas.drawCircle(24f,15f,7f,p); canvas.drawArc(10f,24f,38f,47f,180f,180f,false,p) }
             1->{ canvas.drawCircle(24f,24f,17f,p);canvas.drawOval(8f,15f,40f,27f,p);canvas.drawLine(24f,25f,24f,41f,p);canvas.drawLine(9f,23f,19f,33f,p);canvas.drawLine(39f,23f,29f,33f,p) }
@@ -17,4 +19,5 @@ internal class ProfileAvatar(c:Context,private val style:Int,private val color:I
             else->{ canvas.drawRoundRect(7f,16f,41f,37f,5f,5f,p);canvas.drawLine(12f,16f,18f,8f,p);canvas.drawLine(18f,8f,30f,8f,p);canvas.drawLine(30f,8f,36f,16f,p);canvas.drawCircle(15f,29f,2f,p);canvas.drawCircle(33f,29f,2f,p) }
         };canvas.restore()
     }
+    companion object { const val ADD=-1 }
 }

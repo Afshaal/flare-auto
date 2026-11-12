@@ -3,8 +3,6 @@ package app.flare.auto
 import android.content.Context
 import android.content.SharedPreferences
 import android.graphics.Color
-import android.graphics.ColorMatrix
-import android.graphics.ColorMatrixColorFilter
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
@@ -54,7 +52,7 @@ internal object HomeChrome {
         val items = DockConfig.read(p)
         val size = c.dp(DockConfig.size(c, items.count { it.visible }, DockConfig.iconCeiling(p.getInt(Keys.DOCK_ICONS, 24))))
         val labels = p.getBoolean(Keys.DOCK_LABELS, true)
-        val mono = if (p.getBoolean(Keys.DOCK_MONO, false)) ColorMatrixColorFilter(ColorMatrix().apply { setSaturation(0f) }) else null
+        // Installed icons in their own colours; the old "dock_mono" preference is no longer read (kept, not renamed).
         val textSize = 14 * p.textScale
         items.forEachIndexed { index, item ->
             if (!item.visible) return@forEachIndexed
@@ -67,7 +65,6 @@ internal object HomeChrome {
             }
             val icon = if (item.action == DockAction.APP) ImageView(c).apply {
                 setImageDrawable(AppIcons.get(c, item.target))
-                if (mono != null) colorFilter = mono
             } else NavGlyph(c, item.action.glyph, t.textPrimary)
             cell.addView(icon, LinearLayout.LayoutParams(size, size))
             cell.addView(TextView(c).apply {

@@ -43,7 +43,7 @@ internal object IconPacks {
     @JvmStatic
     fun name(context: Context): String {
         val packageName = ProfileStore.preferences(context).getString(KEY, "") ?: ""
-        if (packageName.isEmpty()) return "Simple Icons"
+        if (packageName.isEmpty()) return "Installed icons"
         return try {
             context.packageManager.getApplicationLabel(
                 context.packageManager.getApplicationInfo(packageName, 0)

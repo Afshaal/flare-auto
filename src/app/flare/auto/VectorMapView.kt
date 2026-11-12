@@ -47,6 +47,8 @@ internal class VectorMapView(
     private var map: MapLibreMap? = null
     private var style: Style? = null
     private var route: NavRoute? = null
+    /** Route vertices still ahead (lat,lon pairs); null shows the whole [route]. */
+    private var ahead: DoubleArray? = null
     private var position: LatLng? = null
     private var heading: Double? = null
     private var destroyed = false
@@ -76,7 +78,7 @@ internal class VectorMapView(
         m.uiSettings.isCompassEnabled = false
         if (!interactive) m.uiSettings.setAllGesturesEnabled(false)
         m.setMinZoomPreference(8.0)
-        m.setMaxZoomPreference(19.5)
+        m.setMaxZoomPreference(MAX_ZOOM)
         m.setLatLngBoundsForCameraTarget(LatLngBounds.from(bbox[2], bbox[3], bbox[0], bbox[1]))
         m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(start).zoom(startZoom).build()))
         m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) onUserMove?.invoke() }
@@ -114,16 +116,19 @@ internal class VectorMapView(
         drawVehicle()
     }
 
-    fun showRoute(path: NavRoute?) { route = path; drawRoute() }
+    fun showRoute(path: NavRoute?) { route = path; ahead = null; drawRoute() }
+
+    /** Only the part of the route ahead of the vehicle stays drawn ([NavGeometry.remaining]). */
+    fun showRemaining(points: DoubleArray) { if (route != null) { ahead = points; drawRoute() } }
 
     private fun drawRoute() {
         val source = style?.getSourceAs<GeoJsonSource>(ROUTE) ?: return
-        val path = route
-        if (path == null || path.points.size < 4) { source.setGeoJson(EMPTY); return }
+        val points = ahead ?: route?.points
+        if (points == null || points.size < 4) { source.setGeoJson(EMPTY); return }
         val coords = StringBuilder()
-        for (i in 0 until path.points.size / 2) {
+        for (i in 0 until points.size / 2) {
             if (i > 0) coords.append(',')
-            coords.append('[').append(fmt(path.points[i * 2 + 1])).append(',').append(fmt(path.points[i * 2])).append(']')
+            coords.append('[').append(fmt(points[i * 2 + 1])).append(',').append(fmt(points[i * 2])).append(']')
         }
         source.setGeoJson("""{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[$coords]}}""")
     }
@@ -145,6 +150,9 @@ internal class VectorMapView(
      * Moves the camera to the vehicle. Heading-up: rotated to [heading], tilted, the car in the lower part of the
      * view with the road ahead visible. North-up: flat, north at the top, car centred.
      */
+    /** Zoom the camera settles at when following starts (closer than an overview, like in-car navigation). */
+    var followZoom = FOLLOW_ZOOM
+
     fun follow(headingUp: Boolean, animate: Boolean) {
         val m = map ?: return
         val at = position ?: return
@@ -152,10 +160,11 @@ internal class VectorMapView(
         val builder = CameraPosition.Builder().target(at)
         if (headingUp) {
             builder.bearing(heading ?: current.bearing).tilt(HEADING_TILT).padding(0.0, height * 0.42, 0.0, 0.0)
-            if (!followZoomSet && current.zoom < 15.5) builder.zoom(16.5)
         } else {
             builder.bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0)
         }
+        // First follow after opening: settle at the close driving zoom unless the driver is already closer.
+        if (!followZoomSet && current.zoom < followZoom - 0.4) builder.zoom(followZoom)
         followZoomSet = true
         val update = CameraUpdateFactory.newCameraPosition(builder.build())
         if (animate) m.easeCamera(update, FOLLOW_MS, false) else m.moveCamera(update)
@@ -184,20 +193,21 @@ internal class VectorMapView(
 
     /** Blue disc with a white rim; with [arrow], a white navigation arrow pointing up (north before rotation). */
     private fun marker(arrow: Boolean): Bitmap {
-        val size = (44 * density).toInt()
+        val size = (MARKER_DP * density).toInt()
         val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
         val c = Canvas(bitmap)
         val paint = Paint(Paint.ANTI_ALIAS_FLAG)
         val r = size / 2f
         paint.color = 0x55000000
-        c.drawCircle(r, r + density, r - 2 * density, paint)
+        c.drawCircle(r, r + density * .7f, r - 1.5f * density, paint)
         paint.color = 0xffffffff.toInt()
-        c.drawCircle(r, r, r - 3 * density, paint)
+        c.drawCircle(r, r, r - 2 * density, paint)
         paint.color = MARKER_COLOR
-        c.drawCircle(r, r, r - 6 * density, paint)
+        c.drawCircle(r, r, r - 4 * density, paint)
         paint.color = 0xffffffff.toInt()
         if (arrow) {
-            val s = r * 0.62f
+            // The arrow fills most of the smaller disc so the direction stays readable at a glance.
+            val s = r * 0.66f
             val p = Path().apply {
                 moveTo(r, r - s); lineTo(r + s * 0.72f, r + s * 0.78f); lineTo(r, r + s * 0.38f); lineTo(r - s * 0.72f, r + s * 0.78f); close()
             }
@@ -218,6 +228,13 @@ internal class VectorMapView(
         private const val ROUTE_CASING = 0xff1f4fae.toInt()
         private const val MARKER_COLOR = 0xff2f7dff.toInt()
         const val HEADING_TILT = 55.0
+        /** Closest zoom (tiles stop at z15 and are over-zoomed; streets stay sharp as vectors). */
+        const val MAX_ZOOM = 20.5
+        /** Default following zoom: full map; the Home widget uses [WIDGET_FOLLOW_ZOOM] (smaller view, a bit wider). */
+        const val FOLLOW_ZOOM = 17.4
+        const val WIDGET_FOLLOW_ZOOM = 16.9
+        /** Vehicle marker diameter (was 44 dp). */
+        const val MARKER_DP = 32
         private const val FOLLOW_MS = 950
 
         /** MapLibre needs OpenGL ES 3.0. */
@@ -229,7 +246,7 @@ internal class VectorMapView(
         /** MapLibre zoom (512 px tiles) showing [km] across [widthPx] at [lat]. */
         fun zoomForSpan(km: Int, widthPx: Int, lat: Double): Double {
             val metresPerPixel = km * 1000.0 / widthPx.coerceAtLeast(1)
-            return (Math.log(40075016.686 * Math.cos(Math.toRadians(lat)) / (512 * metresPerPixel)) / Math.log(2.0)).coerceIn(8.0, 19.0)
+            return (Math.log(40075016.686 * Math.cos(Math.toRadians(lat)) / (512 * metresPerPixel)) / Math.log(2.0)).coerceIn(8.0, MAX_ZOOM - 0.5)
         }
     }
 }

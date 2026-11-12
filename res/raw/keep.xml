@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Resource shrinking keeps only resources it can see referenced. The Simple Icons drawables are looked up
-     by name at runtime (icon picker list, automatic matching index, drawer overrides, brand icons in
-     KnownApps), so all of them are kept. This file itself is removed from the APK by the shrinker. -->
-<resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/si_*"
-    tools:shrinkMode="strict" />

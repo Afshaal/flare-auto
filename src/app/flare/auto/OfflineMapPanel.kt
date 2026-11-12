@@ -12,66 +12,88 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
     private val refreshers=ArrayList<()->Unit>()
     /** Navigation pack state, checked on the routing thread whenever settings resume. */
     private var pack:NavigationPack.Status?=null
+    /**
+     * Offline maps settings, kept to the controls a driver uses: on/off, the navigation pack, the 3D map and its
+     * orientation, following, the default map view, and one "Other regions" row that gathers the Mapsforge region
+     * actions (catalog, URL, download, import, remove) behind a single list. Attribution lives on the map ("i"
+     * button) and in About › Open-source credits.
+     */
     init {
         val enabled=ui.toggle("Enable offline maps",p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false),Runnable {
             p.edit().putBoolean(Keys.OFFLINE_MAP_ENABLED,!p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)).apply();refresh()
         })
         ui.add(group,enabled);refreshers.add { enabled.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false) }
         fun row(name:String,value:()->String,action:()->Unit) {
-            val v=ui.valueRow(name,value(),Runnable(action));ui.add(group,v);refreshers.add { v.value.text=value() }
+            val v=ui.valueRow(name,value(),Runnable(action));ui.add(group,v);refreshers.add { v.setValue(value()) }
         }
-        row("Map center",{ if(p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrEmpty()) "Automatic / map center" else p.getString(Keys.OFFLINE_MAP_LAT,"")+", "+p.getString(Keys.OFFLINE_MAP_LON,"") }) { editCenter() }
-        row("Use current GPS position",{ "Requires location access" }) { useLocation() }
-        row("Map view span",{ "${p.getInt(Keys.OFFLINE_MAP_SPAN,10)} km across" }) {
-            val values=intArrayOf(2,5,10,20,50,100,200)
-            ThemedDialogs.Builder(a).setTitle("Visible map area").setItems(values.map { "$it km across" }.toTypedArray()) { _,i->p.edit().putInt(Keys.OFFLINE_MAP_SPAN,values[i]).apply();refresh() }.show()
+        fun toggle(name:String,key:String) {
+            val t=ui.toggle(name,p.getBoolean(key,true),Runnable { p.edit().putBoolean(key,!p.getBoolean(key,true)).apply();refresh() })
+            ui.add(group,t);refreshers.add { t.switch.isChecked=p.getBoolean(key,true) }
         }
-        val follow=ui.toggle("Follow GPS position",p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true),Runnable { p.edit().putBoolean(Keys.OFFLINE_MAP_FOLLOW,!p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true)).apply();refresh() })
-        ui.add(group,follow);refreshers.add { follow.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true) }
-        val vector=ui.toggle("3D vector map",p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true),Runnable { p.edit().putBoolean(Keys.OFFLINE_MAP_VECTOR,!p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true)).apply();refresh() })
-        ui.add(group,vector);refreshers.add { vector.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true) }
-        row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up, tilted" else "North-up" }) {
-            ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up, tilted 3D","North-up, flat")) { _,i->
-                p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
-        }
-        row("Map card size",{ "Resize in Home editor" }) { a.startActivity(Intent(a,GridEditorActivity::class.java)) }
-        row("Browse offline regions",{ "Mapsforge download catalog" }) { MapRegions.show(a) { url->p.edit().putString(Keys.OFFLINE_MAP_URL,url).apply();refresh() } }
-        row("Offline map source",{ p.getString(Keys.OFFLINE_MAP_URL,"")?.takeIf { it.isNotBlank() } ?: "Choose a .map download URL" }) {
-            val input=EditText(a).apply { setSingleLine();hint="https://…/region.map";setText(p.getString(Keys.OFFLINE_MAP_URL,""));setTextColor(ui.t.textPrimary) }
-            ThemedDialogs.Builder(a).setTitle("Offline region URL").setMessage("Use a direct HTTPS Mapsforge .map file, up to 512 MB. Regional files contain their full published coverage; view span changes the displayed frame, not the downloaded file.")
-                .setView(input).setPositiveButton("Save") { _,_->p.edit().putString(Keys.OFFLINE_MAP_URL,input.text.toString().trim()).apply();refresh() }.setNegativeButton("Cancel",null).show()
-        }
-        row("Download selected region",{ if(OfflineMapStore.busy) "Downloading…" else "Manual download" }) { OfflineMapStore.download(a,p.getString(Keys.OFFLINE_MAP_URL,"").orEmpty()) }
-        row("Import offline map",{ "Choose .map from storage or USB" }) {
-            try { a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),PICK_MAP) }
-            catch(_:android.content.ActivityNotFoundException) { Toast.makeText(a,"No file picker is available",Toast.LENGTH_SHORT).show() }
-        }
-        row("Map storage",{
-            val f=OfflineMapStore.region(a)
-            val packMap=(pack as? NavigationPack.Status.Ready)?.pack?.map
-            when {
-                f.isFile -> "%.1f MB · map file".format(java.util.Locale.US,f.length()/1048576.0)
-                packMap!=null -> "%.1f MB · navigation pack map".format(java.util.Locale.US,packMap.length()/1048576.0)
-                else -> "Bundled world overview · no street detail"
-            }
-        }) { a.startActivity(Intent(a,OfflineMapActivity::class.java)) }
-        row("Navigation pack",{ pack?.message ?: "Checking…" }) {
+        row("Navigation pack",{ packValue() }) {
             val folder=NavigationPack.root(a)?.absolutePath ?: "Android/data/${a.packageName}/files/navigation"
             ThemedDialogs.Builder(a).setTitle("Offline navigation pack").setMessage((pack?.message ?: "Checking…") +
                 "\n\nDriving routes, place search and spoken directions need the region pack built by flare-lahore-tools. " +
-                "Copy its folder (for example \"lahore\", containing build-info.json) to:\n$folder\n\n" +
-                "Open the offline map and tap the panel at the top to search a destination.")
+                "Copy its folder (for example \"lahore\", containing build-info.json) to:\n$folder")
                 .setPositiveButton("Close",null).show()
         }
-        row("Download status",{ OfflineMapStore.status.ifBlank { "No transfer running" } }) { if(OfflineMapStore.busy) OfflineMapStore.cancel() }
-        row("Remove downloaded map",{ "Keep bundled world overview" }) {
-            ThemedDialogs.Builder(a).setTitle("Remove downloaded region?").setMessage("Map files are shared by all driver profiles. The bundled world overview stays available.")
-                .setPositiveButton("Remove") { _,_->OfflineMapStore.delete(a);refresh() }.setNegativeButton("Cancel",null).show()
+        toggle("3D vector map",Keys.OFFLINE_MAP_VECTOR)
+        row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up 3D" else "North-up" }) {
+            ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up 3D","North-up")) { _,i->
+                p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
         }
-        row("Map credits",{ "© OpenStreetMap contributors · MapLibre · Mapsforge · GraphHopper" }) {
-            ThemedDialogs.Builder(a).setTitle("Offline maps").setMessage("Map, routing and place data © OpenStreetMap contributors, ODbL 1.0. 3D vector map rendered with MapLibre Native, BSD-2-Clause; labels in Noto Sans and Noto Sans Arabic, SIL OFL 1.1. Mapsforge renderer, LGPL-3.0 with linking exception. GraphHopper router, Apache-2.0. Bundled world overview: mapsforge.org, 2016-02-20; outlines only. Offline street maps require a regional .map file. Driving routes, place search and spoken directions work offline when the navigation pack is installed (Launcher settings › Offline maps).")
-                .setPositiveButton("Close",null).show()
+        toggle("Follow GPS position",Keys.OFFLINE_MAP_FOLLOW)
+        row("Map center",{ if(p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrEmpty()) "Automatic" else "Custom" }) {
+            ThemedDialogs.Builder(a).setTitle("Map center when there is no GPS fix").setItems(arrayOf("Automatic","Current GPS position","Enter coordinates")) { _,i->
+                when(i) { 0->{ p.edit().remove(Keys.OFFLINE_MAP_LAT).remove(Keys.OFFLINE_MAP_LON).apply();refresh() };1->useLocation();else->editCenter() }
+            }.show()
         }
+        row("Map view span",{ "${p.getInt(Keys.OFFLINE_MAP_SPAN,10)} km" }) {
+            val values=intArrayOf(2,5,10,20,50,100,200)
+            ThemedDialogs.Builder(a).setTitle("Visible map area").setItems(values.map { "$it km across" }.toTypedArray()) { _,i->p.edit().putInt(Keys.OFFLINE_MAP_SPAN,values[i]).apply();refresh() }.show()
+        }
+        row("Other regions",{ regionValue() }) { regions() }
+    }
+    private fun packValue():String = when(val s=pack) {
+        null -> "Checking…"
+        is NavigationPack.Status.Ready -> s.pack.id.substringAfterLast('-').removePrefix("r").toIntOrNull()
+            ?.let { "${s.pack.region} · revision $it" } ?: s.pack.region
+        NavigationPack.Status.Missing -> "Not installed"
+        is NavigationPack.Status.Invalid -> "Unusable"
+    }
+    private fun regionValue():String {
+        if(OfflineMapStore.busy) return OfflineMapStore.status.ifBlank { "Downloading…" }
+        val f=OfflineMapStore.region(a)
+        return if(f.isFile) "%.1f MB region".format(java.util.Locale.US,f.length()/1048576.0) else "None"
+    }
+    /** Mapsforge regions outside the navigation pack: catalog, URL, download, import, remove (or cancel a transfer). */
+    private fun regions() {
+        if(OfflineMapStore.busy) {
+            ThemedDialogs.Builder(a).setTitle("Region download").setMessage(OfflineMapStore.status.ifBlank { "Downloading…" })
+                .setPositiveButton("Cancel download") { _,_->OfflineMapStore.cancel();refresh() }.setNegativeButton("Close",null).show()
+            return
+        }
+        val url=p.getString(Keys.OFFLINE_MAP_URL,"").orEmpty()
+        val items=arrayListOf("Browse region catalog","Enter region URL")
+        if(url.isNotBlank()) items.add("Download "+url.substringAfterLast('/'))
+        items.add("Import .map file")
+        if(OfflineMapStore.region(a).isFile) items.add("Remove downloaded region")
+        ThemedDialogs.Builder(a).setTitle("Other regions (Mapsforge)").setItems(items.toTypedArray()) { _,i->
+            when(items[i]) {
+                "Browse region catalog" -> MapRegions.show(a) { chosen->p.edit().putString(Keys.OFFLINE_MAP_URL,chosen).apply();refresh() }
+                "Enter region URL" -> editUrl()
+                "Import .map file" -> try { a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*"),PICK_MAP) }
+                    catch(_:android.content.ActivityNotFoundException) { Toast.makeText(a,"No file picker is available",Toast.LENGTH_SHORT).show() }
+                "Remove downloaded region" -> ThemedDialogs.Builder(a).setTitle("Remove downloaded region?").setMessage("Map files are shared by all driver profiles. The bundled world overview stays available.")
+                    .setPositiveButton("Remove") { _,_->OfflineMapStore.delete(a);refresh() }.setNegativeButton("Cancel",null).show()
+                else -> OfflineMapStore.download(a,url)
+            }
+        }.show()
+    }
+    private fun editUrl() {
+        val input=EditText(a).apply { setSingleLine();hint="https://…/region.map";setText(p.getString(Keys.OFFLINE_MAP_URL,""));setTextColor(ui.t.textPrimary) }
+        ThemedDialogs.Builder(a).setTitle("Offline region URL").setMessage("A direct HTTPS Mapsforge .map file, up to 512 MB.")
+            .setView(input).setPositiveButton("Save") { _,_->p.edit().putString(Keys.OFFLINE_MAP_URL,input.text.toString().trim()).apply();refresh() }.setNegativeButton("Cancel",null).show()
     }
     private fun editCenter() {
         val box=ui.column();val lat=EditText(a).apply { hint="Latitude";setSingleLine();setText(p.getString(Keys.OFFLINE_MAP_LAT,""));setTextColor(ui.t.textPrimary) }

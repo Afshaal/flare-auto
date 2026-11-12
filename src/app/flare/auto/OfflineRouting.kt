@@ -61,7 +61,8 @@ internal class OfflineRouting(c: Context) {
         val distances = NavGeometry.cumulative(points)
         var index = 0
         val steps = path.instructions.map { instruction ->
-            NavStep(instruction.getTurnDescription(path.instructions.tr), instruction.sign, distances[index.coerceAtMost(distances.lastIndex)])
+            NavStep(instruction.getTurnDescription(path.instructions.tr), instruction.sign, distances[index.coerceAtMost(distances.lastIndex)],
+                instruction.name.orEmpty())
                 .also { index += instruction.length }
         }
         return NavRoute(points, distances, steps, path.distance, path.time)

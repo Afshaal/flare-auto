@@ -17,7 +17,6 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import org.json.JSONObject
 import java.util.Locale
 import kotlin.math.abs
 
@@ -47,19 +46,20 @@ class AppsActivity : Activity() {
     private var pendingImagePackage: String? = null
     private var pageNo = 0
     private var entries = ArrayList<Entry>()
-    private val iconCatalog by lazy { loadIconCatalog() }
 
-    /** A drawer tile. Icon fields are resolved when the list loads, never while drawing a page. */
+    /**
+     * A drawer tile. [icon] is a built-in glyph (stock head-unit screens, kept as drawn Civic icons), "carplay" /
+     * "androidauto" (projection marks), "pack:<drawable>" (installed icon pack) or "original" (the app's own
+     * installed icon). Resolved when the list loads, never while drawing a page.
+     */
     class Entry(var label: String, var icon: String, val pkg: String?, val cls: String?, val color: Int) {
         var autoIcon = icon
         val baseIcon = icon
         var internal = false
-        /** Drawable for "carplay", "androidauto", "si_*" icons (0 when the icon is not a resource). */
+        /** Drawable for "carplay" and "androidauto" (0 for other icons). */
         var iconRes = 0
         /** Driver imported an image for this app. */
         var imported = false
-        /** Tint chosen with the icon, or null for the theme colour. */
-        var tint: Int? = null
     }
 
     override fun attachBaseContext(base: Context) { super.attachBaseContext(UiScale.wrap(base, Keys.UI_SCALE_DRAWER)) }
@@ -76,7 +76,7 @@ class AppsActivity : Activity() {
         }
         page.background = WallpaperPack.drawer(this, theme)
         setContentView(page)
-        page.addView(UiKit(this).header("Apps"), LinearLayout.LayoutParams(MATCH, dp(56)))
+        page.addView(UiKit(this).header("Apps", home = false, inset = 0), LinearLayout.LayoutParams(MATCH, dp(56)))
         gridContainer = FrameLayout(this).apply { clipChildren = true }
         page.addView(gridContainer, LinearLayout.LayoutParams(MATCH, 0, 1f))
         grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -109,17 +109,14 @@ class AppsActivity : Activity() {
             loadedEntries.add(Entry(shortcut.label, shortcut.glyph, shortcut.packageName, shortcut.className, color(shortcut.glyph))
                 .apply { internal = shortcut.internal })
         }
-        val catalog = iconCatalog
         for (app in AppCatalog.others(this)) {
             if (generation != loadGeneration) return null
             val packageName = app.packageName
             if (KnownApps.hiddenFromDrawer(packageName) || loadedEntries.any { packageName == it.pkg }) continue
             val style = KnownApps.drawerStyle(app.label, packageName)
             var label = style.label
-            val icon = KnownApps.BRAND_ICONS[packageName]
-                ?: if (style.glyph == "original") findCatalogIcon(catalog, label, packageName) ?: "original" else style.glyph
             if (loadedEntries.any { it.label.equals(label, true) }) label = "$label ($packageName)"
-            loadedEntries.add(Entry(label, icon, packageName, app.className, color(style.color)))
+            loadedEntries.add(Entry(label, style.glyph, packageName, app.className, color(style.color)))
         }
         val saved = ProfileStore.preferences(this)
         val pack = IconPacks.load(this)
@@ -152,20 +149,21 @@ class AppsActivity : Activity() {
     }
 
     private fun resolveIcon(entry: Entry) {
-        entry.iconRes = when {
-            entry.icon == "carplay" -> R.drawable.ic_carplay_mark
-            entry.icon == "androidauto" -> R.drawable.ic_android_auto_mark
-            entry.icon.startsWith("si_") -> drawableId(entry.icon)
+        entry.iconRes = when (entry.icon) {
+            "carplay" -> R.drawable.ic_carplay_mark
+            "androidauto" -> R.drawable.ic_android_auto_mark
             else -> 0
         }
     }
 
-    private fun drawableId(name: String) = resources.getIdentifier(name, "drawable", packageName)
-
+    /**
+     * Per-app custom image. Older builds could also store a Simple Icons choice ("icon_override_<pkg>" = "si_…")
+     * and its colour ("icon_color_<pkg>"); those preferences are left in place but no longer read, so such apps
+     * show their installed icon (or icon pack icon) again.
+     */
     private fun readIconPrefs(saved: SharedPreferences, entry: Entry) {
         val pkg = entry.pkg ?: return
         entry.imported = saved.getBoolean(Keys.ICON_IMAGE_PREFIX + pkg, false)
-        entry.tint = if (saved.contains(Keys.ICON_COLOR_PREFIX + pkg)) saved.getInt(Keys.ICON_COLOR_PREFIX + pkg, 0) else null
     }
 
     private fun applyPack(saved: SharedPreferences, items: List<Entry>, pack: IconPacks.Pack?) {
@@ -178,10 +176,6 @@ class AppsActivity : Activity() {
                 if (match != null && pack.drawableId(match) != 0) entry.autoIcon = "pack:$match"
             }
             entry.icon = entry.autoIcon
-            if (!protectedIcon) {
-                val override = saved.getString(Keys.ICON_OVERRIDE_PREFIX + pkg, "") ?: ""
-                if (override.startsWith("si_") && drawableId(override) != 0) entry.icon = override
-            }
             resolveIcon(entry)
             readIconPrefs(saved, entry)
         }
@@ -203,7 +197,7 @@ class AppsActivity : Activity() {
     }
 
     private fun appListChanged(before: Map<String, *>, after: Map<String, *>): Boolean {
-        fun relevant(key: String) = key == Keys.ICON_PACK || key == Keys.HIDDEN_APPS || key.startsWith(Keys.ICON_OVERRIDE_PREFIX)
+        fun relevant(key: String) = key == Keys.ICON_PACK || key == Keys.HIDDEN_APPS
         return before.keys.any { relevant(it) && before[it] != after[it] } || after.keys.any { relevant(it) && before[it] != after[it] }
     }
 
@@ -341,6 +335,8 @@ class AppsActivity : Activity() {
         updatePageIndicator(pages)
         val tileSize = dp(78)
         val iconSize = dp(37)
+        // Installed, icon-pack and imported icons fill the tile area themselves (their own shape and colours).
+        val fullSize = FrameLayout.LayoutParams(dp(74), dp(74), Gravity.CENTER)
         val labelHeight = dp(42)
         val labelGap = dp(4)
         val corner = dp(21).toFloat()
@@ -359,7 +355,7 @@ class AppsActivity : Activity() {
                 val square = FrameLayout(this)
                 square.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(entry.color, shade(entry.color)))
                     .apply { cornerRadius = corner }
-                addIcon(square, entry, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER))
+                addIcon(square, entry, FrameLayout.LayoutParams(iconSize, iconSize, Gravity.CENTER), fullSize)
                 cell.addView(square, LinearLayout.LayoutParams(tileSize, tileSize))
                 cell.addView(label(entry.label, 15), LinearLayout.LayoutParams(MATCH, labelHeight).apply { topMargin = labelGap })
                 cell.contentDescription = entry.label
@@ -371,7 +367,7 @@ class AppsActivity : Activity() {
         }
     }
 
-    private fun addIcon(square: FrameLayout, entry: Entry, iconParams: FrameLayout.LayoutParams) {
+    private fun addIcon(square: FrameLayout, entry: Entry, iconParams: FrameLayout.LayoutParams, fullSize: FrameLayout.LayoutParams) {
         val pkg = entry.pkg
         val imported = if (pkg != null && entry.imported) CustomImages.load(this, CustomImages.iconRole(pkg)) else null
         val packed = entry.icon.takeIf { it.startsWith("pack:") }?.substring(5)?.let { name ->
@@ -382,13 +378,16 @@ class AppsActivity : Activity() {
                 square.background = null
                 square.addView(ImageView(this).apply { setImageResource(R.drawable.ic_launcher) }, FrameLayout.LayoutParams(MATCH, MATCH, Gravity.CENTER))
             }
-            imported != null || packed != null -> square.addView(ImageView(this).apply { setImageDrawable(imported ?: packed) }, iconParams)
-            entry.icon == "carplay" || entry.icon == "androidauto" || entry.icon.startsWith("si_") -> {
-                val projection = entry.icon == "carplay" || entry.icon == "androidauto"
-                square.addView(ImageView(this).apply {
-                    setImageResource(entry.iconRes)
-                    setColorFilter(if (projection) theme.textPrimary else entry.tint ?: theme.textPrimary)
-                }, iconParams)
+            imported != null || packed != null -> {
+                square.background = null
+                square.addView(ImageView(this).apply { setImageDrawable(imported ?: packed) }, fullSize)
+            }
+            entry.icon == "carplay" || entry.icon == "androidauto" ->
+                square.addView(ImageView(this).apply { setImageResource(entry.iconRes); setColorFilter(theme.textPrimary) }, iconParams)
+            entry.icon == "original" && pkg != null && entry.cls != null -> {
+                // The app's own installed icon, in its own colours (no automatic tinting).
+                square.background = null
+                square.addView(ImageView(this).apply { setImageDrawable(AppIcons.get(this@AppsActivity, "$pkg/${entry.cls}")) }, fullSize)
             }
             entry.icon == "original" -> square.addView(label(entry.label.take(1).ifEmpty { "?" }.uppercase(Locale.getDefault()), 24).apply {
                 typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
@@ -401,10 +400,9 @@ class AppsActivity : Activity() {
         val pkg = entry.pkg ?: return
         ThemedDialogs.Builder(this)
             .setTitle(entry.label)
-            .setItems(arrayOf("Choose from Simple Icons", "Choose image", "Use automatic icon")) { _, choice ->
+            .setItems(arrayOf("Choose image", "Use automatic icon")) { _, choice ->
                 when (choice) {
-                    0 -> startActivityForResult(Intent(this, IconPickerActivity::class.java).putExtra(IconPickerActivity.EXTRA_PACKAGE, pkg), REQUEST_ICON)
-                    1 -> {
+                    0 -> {
                         pendingImagePackage = pkg
                         CustomImages.choose(this)
                     }
@@ -414,7 +412,6 @@ class AppsActivity : Activity() {
                         entries.filter { it.pkg == pkg }.forEach {
                             it.icon = it.autoIcon
                             it.imported = false
-                            it.tint = null
                             resolveIcon(it)
                         }
                         render()
@@ -436,38 +433,7 @@ class AppsActivity : Activity() {
             })
             return
         }
-        if (requestCode == REQUEST_ICON && resultCode == RESULT_OK && data != null) {
-            val packageName = data.getStringExtra(IconPickerActivity.EXTRA_PACKAGE)
-            val icon = data.getStringExtra(IconPickerActivity.EXTRA_ICON)
-            if (packageName != null && icon != null) {
-                val saved = ProfileStore.preferences(this)
-                entries.filter { it.pkg == packageName }.forEach {
-                    it.icon = icon
-                    resolveIcon(it)
-                    readIconPrefs(saved, it)
-                }
-                render()
-            }
-        }
     }
-
-    private fun loadIconCatalog(): JSONObject = try {
-        JSONObject(assets.open("simple-icons-index.json").bufferedReader(Charsets.UTF_8).use { it.readText() })
-    } catch (_: Exception) {
-        JSONObject()
-    }
-
-    /** Simple Icons match by app label, then by a distinctive package-name segment. */
-    private fun findCatalogIcon(catalog: JSONObject, label: String, packageName: String): String? {
-        catalog.optString(normalise(label), "").takeIf { it.isNotEmpty() }?.let { return it }
-        for (part in packageName.lowercase(Locale.ROOT).split(".")) {
-            if (part.length < 5 || part == "android" || part == "google") continue
-            catalog.optString(normalise(part), "").takeIf { it.isNotEmpty() }?.let { return it }
-        }
-        return null
-    }
-
-    private fun normalise(value: String) = value.lowercase(Locale.ROOT).replace(NON_ALPHANUMERIC, "")
 
     private fun shade(color: Int): Int =
         Color.rgb((Color.red(color) * .65).toInt(), (Color.green(color) * .65).toInt(), (Color.blue(color) * .65).toInt())
@@ -484,9 +450,7 @@ class AppsActivity : Activity() {
 
     companion object {
         private const val ROWS = 2
-        private const val REQUEST_ICON = 413
         private const val STATE_PENDING_IMAGE = "pendingIconImage"
-        private val NON_ALPHANUMERIC = Regex("[^a-z0-9]")
         private val COLORS = hashMapOf(
             "carplay" to 0xffa64350.toInt(), "androidauto" to 0xff3b7e70.toInt(),
             "audio" to 0xff7c5e91.toInt(), "radio" to 0xffa26443.toInt(), "bluetooth" to 0xff456d92.toInt(),

@@ -29,7 +29,10 @@ class KeysTest {
             "saver_banner_apps", "saver_banner_position", "saver_banner_seconds", "saver_banner_size",
             "offline_map_enabled", "offline_map_lat", "offline_map_lon", "offline_map_span", "offline_map_follow",
             "offline_map_url", "offline_map_vector", "offline_map_heading_up", "offline_nav_active", "offline_nav_lat", "offline_nav_lon", "offline_nav_name",
-            "offline_nav_voice", "_editor_image")
+            "offline_nav_voice", "_editor_image",
+            // 1.2.0 maplibre-r3: offline search places and the sub-minute screensaver timeout (new keys only).
+            "offline_places_starred", "offline_places_recent", "offline_place_home", "offline_place_work",
+            "saver_timeout_seconds")
         val values = constants().values
         assertEquals("a key constant was added, removed or renamed", expected, values.toSet())
         assertEquals("two constants share one key", values.size, values.toSet().size)

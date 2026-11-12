@@ -92,7 +92,10 @@ internal object Keys {
     const val SOLAR_LON = "solar_lon"
 
     // Screensaver
+    /** Idle timeout in minutes (0 = off). Unchanged meaning; see [SAVER_TIMEOUT_SECONDS]. */
     const val SAVER_TIMEOUT = "saver_timeout"
+    /** Sub-minute idle timeout (15 or 30 s). When set (> 0) it takes precedence over [SAVER_TIMEOUT]. */
+    const val SAVER_TIMEOUT_SECONDS = "saver_timeout_seconds"
     const val SAVER_MODE = "saver_mode"
     const val SAVER_SIZE = "saver_size"
     const val SAVER_CLOCK_STYLE = "saver_clock_style"
@@ -127,6 +130,11 @@ internal object Keys {
     const val OFFLINE_NAV_LON = "offline_nav_lon"
     const val OFFLINE_NAV_NAME = "offline_nav_name"
     const val OFFLINE_NAV_VOICE = "offline_nav_voice"
+    /** Offline search (JSON, per driver profile): starred places, recent destinations, the Home and Work slots. */
+    const val OFFLINE_PLACES_STARRED = "offline_places_starred"
+    const val OFFLINE_PLACES_RECENT = "offline_places_recent"
+    const val OFFLINE_PLACE_HOME = "offline_place_home"
+    const val OFFLINE_PLACE_WORK = "offline_place_work"
 
     /** Editor-only scratch key (lives in the editor's draft, never saved). */
     const val EDITOR_IMAGE = "_editor_image"

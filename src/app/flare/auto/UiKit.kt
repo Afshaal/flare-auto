@@ -36,20 +36,31 @@ internal class UiKit(@JvmField val a: Activity) {
 
     fun column(): LinearLayout = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
 
-    fun header(title: String): LinearLayout {
+    /**
+     * Screen header: a round back button (drawn chevron in a 44 dp circle, vertically centred on the title), the
+     * bold title and, unless [home] is false, a Home button on the right. [inset] is the back button's distance
+     * from the row's left edge; the app drawer passes 0 so the button lines up with the page's content edge.
+     */
+    fun header(title: String, home: Boolean = true, inset: Int = dp(10)): LinearLayout {
         val row = LinearLayout(a).apply { gravity = Gravity.CENTER_VERTICAL }
-        val back = text("‹", 28, t.textPrimary).apply {
-            gravity = Gravity.CENTER
+        val back = android.widget.ImageView(a).apply {
+            setImageDrawable(MapIcon("back", t.textPrimary))
             contentDescription = "Back"
+            // The chevron's visual centre sits left of its box centre; shift it right by 1 dp.
+            setPadding(dp(12), dp(11), dp(10), dp(11))
+            background = android.graphics.drawable.GradientDrawable().apply {
+                shape = android.graphics.drawable.GradientDrawable.OVAL; setColor(t.card); setStroke(dp(1), t.cardBorder)
+            }
             setOnClickListener { a.finish() }
         }
-        row.addView(back, LinearLayout.LayoutParams(dp(56), dp(56)))
+        row.addView(back, LinearLayout.LayoutParams(dp(44), dp(44)).apply { leftMargin = inset; rightMargin = dp(14) })
         val label = text(title, 20, t.textPrimary).apply {
             setTypeface(Typeface.DEFAULT, Typeface.BOLD)
             letterSpacing = 0.015f
         }
         row.addView(label, LinearLayout.LayoutParams(0, dp(56), 1f))
-        val home = text("⌂", 25, t.textPrimary).apply {
+        if (!home) return row
+        val homeButton = text("⌂", 25, t.textPrimary).apply {
             gravity = Gravity.CENTER
             contentDescription = "Home"
             setOnClickListener {
@@ -57,7 +68,7 @@ internal class UiKit(@JvmField val a: Activity) {
                 a.finish()
             }
         }
-        row.addView(home, LinearLayout.LayoutParams(dp(56), dp(56)))
+        row.addView(homeButton, LinearLayout.LayoutParams(dp(56), dp(56)))
         return row
     }
 
