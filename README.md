@@ -93,13 +93,6 @@ Install the appropriate app on the head unit, then assign it to the matching sho
 
 ### Performance
 
-To disable Android's interface animations:
-
-1. Open **Android Settings â†’ Developer options**.
-2. Set **Window animation scale**, **Transition animation scale**, and **Animator duration scale** to **Animation off**.
-
-This removes visual transitions and can make the interface feel more responsive. It won't necessarily improve playback or app performance. Flare Auto also has its own **Animations** switch under Appearance; Android's Animator duration scale must be enabled to see launcher animations.
-
 If you're comfortable with ADB, review preinstalled apps and disable ones you've confirmed are unnecessary. Record your changes so you can reverse them, and test radio, Bluetooth and the backup camera afterward. System packages vary by device, so avoid applying a generic removal list.
 
 ## Roadmap
@@ -122,7 +115,7 @@ Weather is disabled by default. When enabled, the selected coordinates are sent 
 
 ## Known limitations
 
-- Switching to the head unitâ€™s Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
+- Switching to the head unit's Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
 - Radio, Bluetooth, CarPlay and Android Auto shortcuts launch other apps; availability and behavior depend on the device.
 - Initial source selection and startup actions are vendor-dependent.
 - Sunset-based dimming is inactive when no solar location is available.
@@ -155,7 +148,7 @@ An APK signed with a different key cannot update an existing installation. Unins
 
 ## Credits and license
 
-Copyright Â© 2026 Afshaal â€” Flare Auto. Licensed under GPL-3.0-only. Third-party components retain their respective copyrights.
+Copyright © 2026 Afshaal Flare Auto. Licensed under GPL-3.0-only. Third-party components retain their respective copyrights.
 
 Flare Auto includes media-session code adapted from [Dashline](https://github.com/metehankaygsz/dashline), copyright 2026 Metehan Kaygisiz, GPL-3.0-only. See [LICENSE](LICENSE) and [CREDITS.md](CREDITS.md).
 
