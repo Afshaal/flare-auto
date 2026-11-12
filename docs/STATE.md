@@ -84,3 +84,13 @@ dots, no date long-press) and settings tab icons. Compare later work against thi
 MapLibre Native 13.0.2 (OpenGL ES) renderer with heading-up tilt / north-up, using the pack r3 `vector/`
 display map; Mapsforge kept as fallback. Test APK `work/FlareAuto-v1.2.0-maplibre.apk` (same version and key
 as the baseline). Details, install and car checklist: [MAPLIBRE-3D.md](MAPLIBRE-3D.md).
+
+## 2026-11-12: map UI r3 (branch `maps/maplibre`)
+
+27 owner items: edge-to-edge full map with turn and trip cards, route restore fix and trimmed route line, closer
+zoom, smaller marker, "i" attribution, new map controls; widget turn indicator and trip bar; full-screen offline
+search with Home / Work / saved / recent places, area hints, grouping and punctuation-free matching (pack revision
+4); installed app icons, Simple Icons removed (−4.0 MB); simplified Offline maps settings; capitalised values;
+15 s / 30 s screensaver; balanced profile picker. Release `work/FlareAuto-v1.2.0-maplibre-r3.apk` (1.2.0 / 4,
+same key). Details, BlueStacks record and car checklist: [MAP-UI-R3.md](MAP-UI-R3.md).
+

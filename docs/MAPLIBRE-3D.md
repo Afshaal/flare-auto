@@ -85,6 +85,9 @@ build without x86_64 would be about 21 MB.
 
 ## Home map widget (maplibre-r2)
 
+> Superseded in maplibre-r3 ([MAP-UI-R3.md](MAP-UI-R3.md)): the "Where to?" pill and the text banner were replaced
+> by a compact turn indicator and trip bar; the full map lost its header and gained new controls.
+
 The Home map card is a read-only preview, like a CarPlay map tile:
 
 * it shows the live map, position, heading-up or north-up following, and while navigating the active route and

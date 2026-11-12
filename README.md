@@ -161,4 +161,4 @@ Copyright © 2026 Afshaal — Flare Auto. Licensed under GPL-3.0-only. Third-par
 
 Flare Auto includes media-session code adapted from [Dashline](https://github.com/metehankaygsz/dashline), copyright 2026 Metehan Kaygisiz, GPL-3.0-only. See [LICENSE](LICENSE) and [CREDITS.md](CREDITS.md).
 
-Gradient credits are in [GRADIENT-ATTRIBUTION.md](GRADIENT-ATTRIBUTION.md). Simple Icons credits and notices are in [SIMPLE-ICONS-ATTRIBUTION.txt](SIMPLE-ICONS-ATTRIBUTION.txt) and `assets/`. Brand names and marks belong to their respective owners; their inclusion does not imply affiliation or endorsement. Review rights to bundled brand artwork before distribution.
+Gradient credits are in [GRADIENT-ATTRIBUTION.md](GRADIENT-ATTRIBUTION.md). Drawer icons are the apps' own installed icons (no brand artwork is bundled). Brand names and marks belong to their respective owners; their inclusion does not imply affiliation or endorsement. Review rights to bundled brand artwork before distribution.

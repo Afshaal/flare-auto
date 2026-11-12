@@ -11,9 +11,10 @@ Session selection and metadata behavior adapted from [Dashline MediaMonitor](htt
 
 Dark adaptations of the MIT-licensed 720pixel free-gradient-tools palette. See [GRADIENT-ATTRIBUTION.md](GRADIENT-ATTRIBUTION.md) for the full notice.
 
-## Simple Icons and trademarks
+## Trademarks
 
-Icon artwork from [Simple Icons](https://github.com/simple-icons/simple-icons), CC0-1.0. See [SIMPLE-ICONS-ATTRIBUTION.txt](SIMPLE-ICONS-ATTRIBUTION.txt) and `assets/simple-icons-disclaimer.txt`.
+App icons in the drawer are the apps' own installed icons (or an icon pack / image the driver chose); no brand
+artwork is bundled since 1.2.0-maplibre-r3 (the Simple Icons catalog was removed).
 Brand names and logos — including Apple CarPlay and Android Auto — are trademarks of their respective owners. They are used only to identify apps and services; this does not imply affiliation or endorsement.
 
 ## Offline maps

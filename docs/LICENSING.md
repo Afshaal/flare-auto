@@ -33,7 +33,7 @@ Test-only, not in the APK: JUnit 4.13.2 (EPL-1.0), org.json 20231013 (public dom
 
 | Item | License / terms | Notes |
 |---|---|---|
-| Simple Icons drawables (`res/drawable/si_*.xml`, 3,470) and catalogs (`assets/simple-icons-*.json`) | Icon artwork **CC0-1.0** | Brand names and logos stay **trademarks** of their owners; inclusion does not imply endorsement. See `SIMPLE-ICONS-ATTRIBUTION.txt` and `assets/simple-icons-disclaimer.txt`. Review brand guidelines before redistributing marks (e.g. CarPlay, Android Auto, Spotify). |
+| ~~Simple Icons drawables and catalogs~~ | removed in 1.2.0-maplibre-r3 | No third-party brand artwork is bundled any more; the drawer shows each app's installed icon. The CarPlay / Android Auto button marks (`ic_carplay_mark`, `ic_android_auto_mark`) remain and are trademarks of their owners. |
 | CarPlay and Android Auto marks (`ic_carplay_mark`, `ic_android_auto_mark`) | Trademarks of Apple Inc. and Google LLC | Used only to label buttons that open third-party projection apps. |
 | Gradient palette | MIT (720pixel free-gradient-tools) | `GRADIENT-ATTRIBUTION.md`. |
 | Bundled `assets/maps/world.map` | Map data © OpenStreetMap contributors, **ODbL 1.0** | Unmodified Mapsforge world overview (2016-02-20). |

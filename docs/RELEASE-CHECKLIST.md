@@ -5,7 +5,7 @@
 1. **License.** Read [LICENSING.md](LICENSING.md); the Dashline-derived files make the APK GPL-3.0-only as a whole.
 2. **Personal defaults.** `src/app/flare/auto/KnownApps.kt` › `Defaults` holds the vehicle name (`CIVIC`) and trim
    badge (`RS`). Set them to `""` for a generic build; empty values hide the labels (already handled in code).
-3. **Brand marks.** Review the trademark use listed in LICENSING.md (CarPlay / Android Auto buttons, Simple Icons brands).
+3. **Brand marks.** Review the trademark use listed in LICENSING.md (CarPlay / Android Auto buttons).
 4. **Version.** Bump `versionCode` and `versionName` in `app/build.gradle.kts` (the manifest no longer repeats them).
    The in-app updater only offers APKs with a higher version code and the same signing key.
 5. **Signing.** Copy `keystore.properties.example` to `keystore.properties` (git-ignored) or set the `FLARE_*`
@@ -15,9 +15,10 @@
    ./gradlew clean assembleRelease testDebugUnitTest lintDebug
    ```
    Lint must report 0 errors. Release APK: `app/build/outputs/apk/release/`.
-7. **Shrinker check.** Every by-name drawable must be in the release APK:
+7. **Shrinker check.** The app's own drawables (`ic_launcher`, `ic_carplay_mark`, `ic_android_auto_mark`) must be in
+   the release APK (nothing is looked up by name any more since the Simple Icons catalog was removed in r3):
    ```sh
-   apkanalyzer resources names --config default --type drawable app/build/outputs/apk/release/app-release.apk | wc -l   # 3473
+   apkanalyzer resources names --config default --type drawable app/build/outputs/apk/release/app-release.apk | grep -c "ic_launcher\|ic_carplay_mark\|ic_android_auto_mark"   # 3
    ```
    For a runtime check of the R8 rules, build the debug harnesses with the release rules and run them on a device:
    ```sh
