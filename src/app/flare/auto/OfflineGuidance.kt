@@ -67,7 +67,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
                 target=place;turnCard.message("Waiting for GPS · ${place.name}");tripCard.starred(saved.isStarred(place))
                 // Same destination as the route shown elsewhere in this process (full map <-> Home widget): reuse it.
                 val cached=cachedRoute
-                if(cached!=null && cachedKey==key(lat,lon)) {
+                if(cached!=null && cachedKey==key(pack,lat,lon)) {
                     route=cached;map.showRoute(cached);turnCard.message("Continue towards ${place.name}")
                     tripCard.show(cached.distance,cached.millis,p.clock24)
                 }
@@ -104,12 +104,12 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private fun calculate(lat:Double,lon:Double,asPreview:Boolean) {
         val dest=target ?: return
         calculating=true;preview=asPreview;turnCard.message("Calculating route to ${dest.name}…")
-        engine.route(lat,lon,dest.lat,dest.lon) { result->
+        engine.route(lat,lon,dest.lat,dest.lon,pack) { result->
             if(closed) return@route
             calculating=false
             result.fold({ path->
                 route=path;segment=0;spoken=-1;offRoute=0;map.showRoute(path)
-                if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(dest.lat,dest.lon) }
+                if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(pack,dest.lat,dest.lon) }
                 p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,!asPreview).putString(Keys.OFFLINE_NAV_LAT,dest.lat.toString()).putString(Keys.OFFLINE_NAV_LON,dest.lon.toString()).putString(Keys.OFFLINE_NAV_NAME,dest.name).apply()
                 turnCard.message(if(asPreview) "Route preview · ${dest.name}" else "Continue towards ${dest.name}")
                 tripCard.show(path.distance,path.millis,p.clock24)
@@ -198,7 +198,8 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         /** Last active route of this process, so the Home widget and the full map share it without recomputing. */
         private var cachedRoute:NavRoute?=null
         private var cachedKey:String?=null
-        private fun key(lat:Double,lon:Double)="$lat,$lon"
+        /** Includes the pack, so a route from one pack is never reused after switching to another. */
+        private fun key(pack:NavigationPack.Pack,lat:Double,lon:Double)="${pack.dir.absolutePath}|${pack.id}|$lat,$lon"
         /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */
         private val NON_LATIN=Regex("[\\u0600-\\u06FF\\u0750-\\u077F\\uFB50-\\uFDFF\\uFE70-\\uFEFF]")
         /** Instruction for the voice: drops an Urdu-only street name ("turn left onto <name>" -> "turn left"). */

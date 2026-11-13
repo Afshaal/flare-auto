@@ -28,20 +28,26 @@ internal class OfflineRouting(c: Context) {
     private var loadedFrom: File? = null
     private var generation = 0
 
-    fun route(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double, done: (Result<NavRoute>) -> Unit) {
+    /**
+     * [expected]: the pack the caller shows (map, search, coverage); the route fails instead of silently using a
+     * different pack when the driver switched packs meanwhile. Null: whichever pack is selected.
+     */
+    fun route(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double, expected: NavigationPack.Pack? = null,
+              done: (Result<NavRoute>) -> Unit) {
         val token = ++generation
         worker.execute {
-            val result = runCatching { calculate(fromLat, fromLon, toLat, toLon) }
+            val result = runCatching { calculate(fromLat, fromLon, toLat, toLon, expected) }
             main.post { if (token == generation) done(result) }
         }
     }
 
     /** Blocking; routing thread only. */
-    private fun calculate(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double): NavRoute {
+    private fun calculate(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double, expected: NavigationPack.Pack?): NavRoute {
         val pack = when (val status = NavigationPack.verified(app)) {
             is NavigationPack.Status.Ready -> status.pack
             else -> error(status.message)
         }
+        check(expected == null || expected.dir == pack.dir) { "Offline navigation pack changed to ${pack.region}; reopen the map" }
         check(pack.covers(fromLat, fromLon) && pack.covers(toLat, toLon)) { "Offline driving coverage is ${pack.region} and its surrounding approaches" }
         val engine = engineFor(pack)
         val response = engine.route(GHRequest(fromLat, fromLon, toLat, toLon).setProfile(PROFILE).setLocale(Locale.ENGLISH))

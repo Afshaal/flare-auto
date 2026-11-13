@@ -12,36 +12,46 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
     private val refreshers=ArrayList<()->Unit>()
     /** Navigation pack state, checked on the routing thread whenever settings resume. */
     private var pack:NavigationPack.Status?=null
+    /** Installed pack folders and their status (without hashing), read on the routing thread in [resume]. */
+    private var packs:List<Pair<java.io.File,NavigationPack.Status>> = emptyList()
+    /** Why this unit cannot run MapLibre, or null. */
+    private val rendererProblem=VectorMapView.unsupportedReason(a)
     /**
-     * Offline maps settings, kept to the controls a driver uses: on/off, the navigation pack, the 3D map and its
-     * orientation, following, the default map view, and one "Other regions" row that gathers the Mapsforge region
-     * actions (catalog, URL, download, import, remove) behind a single list. Attribution lives on the map ("i"
-     * button) and in About › Open-source credits.
+     * Offline maps settings, kept to the controls a driver uses: on/off, the navigation pack (choice of installed
+     * packs), the map renderer ("MapLibre · 3D" or "Mapsforge · 2D", stored in [Keys.OFFLINE_MAP_VECTOR]) with the
+     * controls of the renderer in use only (orientation for MapLibre; "Other regions" for Mapsforge, which gathers
+     * the region actions: catalog, URL, download, import, remove), then the shared following and map view controls.
+     * Attribution lives on the map ("i" button) and in About › Open-source credits.
      */
     init {
         val enabled=ui.toggle("Enable offline maps",p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false),Runnable {
             p.edit().putBoolean(Keys.OFFLINE_MAP_ENABLED,!p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)).apply();refresh()
         })
         ui.add(group,enabled);refreshers.add { enabled.switch.isChecked=p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false) }
-        fun row(name:String,value:()->String,action:()->Unit) {
-            val v=ui.valueRow(name,value(),Runnable(action));ui.add(group,v);refreshers.add { v.setValue(value()) }
+        fun row(name:String,value:()->String,action:()->Unit):android.view.View {
+            val v=ui.valueRow(name,value(),Runnable(action));ui.add(group,v);refreshers.add { v.setValue(value()) };return v
         }
         fun toggle(name:String,key:String) {
             val t=ui.toggle(name,p.getBoolean(key,true),Runnable { p.edit().putBoolean(key,!p.getBoolean(key,true)).apply();refresh() })
             ui.add(group,t);refreshers.add { t.switch.isChecked=p.getBoolean(key,true) }
         }
-        row("Navigation pack",{ packValue() }) {
-            val folder=NavigationPack.root(a)?.absolutePath ?: "Android/data/${a.packageName}/files/navigation"
-            ThemedDialogs.Builder(a).setTitle("Offline navigation pack").setMessage((pack?.message ?: "Checking…") +
-                "\n\nDriving routes, place search and spoken directions need the region pack built by flare-lahore-tools. " +
-                "Copy its folder (for example \"lahore\", containing build-info.json) to:\n$folder")
-                .setPositiveButton("Close",null).show()
+        /** Shows or hides a row together with the divider above it. */
+        fun visible(row:android.view.View,show:Boolean) {
+            val state=if(show) android.view.View.VISIBLE else android.view.View.GONE
+            row.visibility=state
+            group.getChildAt(group.indexOfChild(row)-1)?.takeIf { it.tag==UiKit.Role.DIVIDER }?.visibility=state
         }
-        toggle("3D vector map",Keys.OFFLINE_MAP_VECTOR)
-        row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up 3D" else "North-up" }) {
+        row("Navigation pack",{ packValue() }) { choosePack() }
+        row("Map renderer",{ rendererValue() }) { chooseRenderer() }
+        // MapLibre · 3D only.
+        val orientation=row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up 3D" else "North-up" }) {
             ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up 3D","North-up")) { _,i->
                 p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
         }
+        // Mapsforge · 2D only: map files outside the navigation pack.
+        val otherRegions=row("Other regions",{ regionValue() }) { regions() }
+        refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(otherRegions,!vector) }
+        // Shared by both renderers.
         toggle("Follow GPS position",Keys.OFFLINE_MAP_FOLLOW)
         row("Map center",{ if(p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrEmpty()) "Automatic" else "Custom" }) {
             ThemedDialogs.Builder(a).setTitle("Map center when there is no GPS fix").setItems(arrayOf("Automatic","Current GPS position","Enter coordinates")) { _,i->
@@ -59,14 +69,69 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
                 e.apply();refresh()
             }.show()
         }
-        row("Other regions",{ regionValue() }) { regions() }
     }
+    private fun packLabel(pack:NavigationPack.Pack):String = pack.id.substringAfterLast('-').removePrefix("r").toIntOrNull()
+        ?.let { "${pack.region} · revision $it" } ?: pack.region
     private fun packValue():String = when(val s=pack) {
         null -> "Checking…"
-        is NavigationPack.Status.Ready -> s.pack.id.substringAfterLast('-').removePrefix("r").toIntOrNull()
-            ?.let { "${s.pack.region} · revision $it" } ?: s.pack.region
+        is NavigationPack.Status.Ready -> packLabel(s.pack)
         NavigationPack.Status.Missing -> "Not installed"
         is NavigationPack.Status.Invalid -> "Unusable"
+    }
+    /** Installed packs to choose from (unusable ones are listed with their problem), plus install help. */
+    private fun choosePack() {
+        val folder=NavigationPack.root(a)?.absolutePath ?: "Android/data/${a.packageName}/files/navigation"
+        val help="Driving routes, place search and spoken directions need a region pack built by flare-lahore-tools. " +
+            "Copy its folder (for example \"lahore\" or \"pakistan\", containing build-info.json) to:\n$folder"
+        val list=packs
+        if(list.isEmpty()) {
+            ThemedDialogs.Builder(a).setTitle("Offline navigation pack").setMessage((pack?.message ?: "Checking…")+"\n\n"+help)
+                .setPositiveButton("Close",null).show()
+            return
+        }
+        val current=(pack as? NavigationPack.Status.Ready)?.pack?.dir?.name ?: NavigationPack.selected(a)
+        val labels=list.map { (dir,status)->
+            when(status) {
+                is NavigationPack.Status.Ready -> "${packLabel(status.pack)}  (${dir.name})"
+                is NavigationPack.Status.Invalid -> "${dir.name} · unusable: ${status.reason}"
+                NavigationPack.Status.Missing -> dir.name
+            }
+        }.toTypedArray()
+        ThemedDialogs.Builder(a).setTitle("Offline navigation pack")
+            .setSingleChoiceItems(labels,list.indexOfFirst { it.first.name==current }) { dialog,i->
+                val (dir,status)=list[i]
+                if(status !is NavigationPack.Status.Ready) {
+                    Toast.makeText(a,"${dir.name} is unusable; reinstall it or choose another pack",Toast.LENGTH_LONG).show()
+                    return@setSingleChoiceItems
+                }
+                dialog.dismiss()
+                if(dir.name==current) return@setSingleChoiceItems
+                NavigationPack.select(a,dir.name)
+                pack=null;refresh();checkPack()
+                Toast.makeText(a,"${status.pack.region} selected for maps, search and routing",Toast.LENGTH_SHORT).show()
+            }
+            .setNeutralButton("How to install") { _,_->
+                ThemedDialogs.Builder(a).setTitle("Install a navigation pack").setMessage(help).setPositiveButton("Close",null).show()
+            }
+            .setNegativeButton("Close",null).show()
+    }
+    /** Pack has a 3D map: null while checking, false without a usable pack. */
+    private fun packVector():Boolean? = when(val s=pack) { null -> null;is NavigationPack.Status.Ready -> s.pack.vector!=null;else -> false }
+    private fun vectorInUse()=SettingsValues.vectorInUse(p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true),rendererProblem,packVector())
+    private fun rendererValue()=SettingsValues.mapRenderer(p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true),rendererProblem,packVector())
+    private fun chooseRenderer() {
+        val options=arrayOf("MapLibre · 3D","Mapsforge · 2D")
+        val chosen=if(p.getBoolean(Keys.OFFLINE_MAP_VECTOR,true) && rendererProblem==null) 0 else 1
+        ThemedDialogs.Builder(a).setTitle("Map renderer").setSingleChoiceItems(options,chosen) { dialog,i->
+            dialog.dismiss()
+            if(i==0 && rendererProblem!=null) {
+                ThemedDialogs.Builder(a).setTitle("MapLibre · 3D unavailable")
+                    .setMessage("The tilted 3D map $rendererProblem on this unit. The standard Mapsforge · 2D map is used instead.")
+                    .setPositiveButton("Close",null).show()
+                return@setSingleChoiceItems
+            }
+            p.edit().putBoolean(Keys.OFFLINE_MAP_VECTOR,i==0).apply();refresh()
+        }.setNegativeButton("Cancel",null).show()
     }
     private fun regionValue():String {
         if(OfflineMapStore.busy) return OfflineMapStore.status.ifBlank { "Downloading…" }
@@ -121,8 +186,13 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
     }
     private fun refresh() { refreshers.forEach { it() } }
     fun resume() {
-        OfflineMapStore.add(this);refresh()
+        OfflineMapStore.add(this);refresh();checkPack()
+    }
+    /** Lists installed packs, then verifies the selected one (checksums the first time: slow for a large pack). */
+    private fun checkPack() {
         OfflineRouting.worker.execute {
+            val installed=NavigationPack.installed(a).map { it to NavigationPack.read(it) }
+            a.runOnUiThread { if(!a.isDestroyed) { packs=installed;refresh() } }
             val status=NavigationPack.verified(a)
             a.runOnUiThread { if(!a.isDestroyed) { pack=status;refresh() } }
         }

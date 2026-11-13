@@ -70,6 +70,9 @@ android {
                 isShrinkResources = true
                 proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro", "proguard-debug-checks.pro")
             }
+            // Verification aid: `-Pflare.debugIdSuffix=.integration` installs the debug build next to the real app
+            // (own package, own data and pack folder) on a test emulator. Unset by default: no change to any build.
+            (project.findProperty("flare.debugIdSuffix") as String?)?.let { applicationIdSuffix = it }
         }
     }
 

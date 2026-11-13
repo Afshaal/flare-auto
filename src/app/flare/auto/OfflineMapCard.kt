@@ -28,7 +28,7 @@ import kotlin.math.roundToInt
 /**
  * Offline map card (Home grid and the full-screen map). Two renderers:
  *
- * * **Vector (MapLibre)** when the navigation pack has a display map, "3D vector map" is on and the device has
+ * * **Vector (MapLibre)** when the navigation pack has a display map, the "Map renderer" setting is MapLibre · 3D ("offline_map_vector") and the device has
  *   OpenGL ES 3: dark style, tilted heading-up or north-up following, blue route, vehicle arrow.
  * * **Mapsforge** otherwise (older packs, downloaded/imported .map regions, the bundled world overview), and as
  *   the fallback when MapLibre cannot start; the credit line then says why.

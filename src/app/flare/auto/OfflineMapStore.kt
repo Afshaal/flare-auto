@@ -33,7 +33,7 @@ internal object OfflineMapStore {
     fun region(c:Context)=File(c.filesDir,"offline_maps/region.map")
     /** Changes whenever the map data changes, so Home can rebuild its map card. */
     fun revision(c:Context)=c.getSharedPreferences(DATA_PREFS,0).getLong(REVISION,0)
-    private fun touch(c:Context)=c.getSharedPreferences(DATA_PREFS,0).edit().putLong(REVISION,System.currentTimeMillis()).apply()
+    fun touch(c:Context)=c.getSharedPreferences(DATA_PREFS,0).edit().putLong(REVISION,System.currentTimeMillis()).apply()
     /** Map to show: a downloaded region, else the navigation pack's map, else the bundled world overview. Worker thread. */
     fun ensure(c:Context):File {
         region(c).takeIf { it.isFile }?.let { return it }

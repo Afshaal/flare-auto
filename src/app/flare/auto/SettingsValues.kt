@@ -80,4 +80,18 @@ internal object SettingsValues {
         if (n == null || n == 0) "None hidden" else "$n hidden"
     }
     fun accent(p: SharedPreferences) = if (p.contains(Keys.ACCENT_COLOR)) hexColor(p.getInt(Keys.ACCENT_COLOR, 0)) else "Theme default"
+
+    /**
+     * Whether the offline map uses MapLibre: [chosen] ([Keys.OFFLINE_MAP_VECTOR]), no [problem] on this unit
+     * (VectorMapView.unsupportedReason) and a pack with a 3D map ([packVector]; null while the pack is being checked).
+     */
+    fun vectorInUse(chosen: Boolean, problem: String?, packVector: Boolean?) = chosen && problem == null && packVector != false
+
+    /** "Map renderer" row value; the renderer actually used, with the reason when it differs from the choice. */
+    fun mapRenderer(chosen: Boolean, problem: String?, packVector: Boolean?) = when {
+        !chosen -> "Mapsforge · 2D"
+        problem != null -> "Mapsforge · 2D (3D unsupported)"
+        packVector == false -> "Mapsforge · 2D (no 3D map in pack)"
+        else -> "MapLibre · 3D"
+    }
 }

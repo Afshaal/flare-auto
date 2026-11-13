@@ -11,8 +11,13 @@ import java.security.MessageDigest
  *
  *     <external files dir>/navigation/<region id>/      (e.g. /sdcard/Android/data/app.flare.auto/files/navigation/lahore/)
  *
+ * Several packs may be installed side by side (e.g. "lahore" and "pakistan"); the driver picks one in Settings ›
+ * Offline maps ([select], stored device-wide, not per driver profile). Maps, search, routing and guidance all read
+ * the pack through [status] / [verified], so they always use the same one. Without a usable choice (nothing chosen
+ * yet, or the chosen folder was removed) the first folder by name that reads as ready is used, else the first by name.
+ *
  * [status] is cheap (reads build-info.json, checks the files exist). [verified] also checks every file against
- * checksums.txt the first time and whenever the files change; call it off the main thread.
+ * checksums.txt the first time and whenever the files change (remembered per pack); call it off the main thread.
  * A missing or broken pack is reported as a [Status], never thrown.
  */
 internal object NavigationPack {
@@ -21,7 +26,10 @@ internal object NavigationPack {
     private const val INFO = "build-info.json"
     private const val CHECKSUMS = "checksums.txt"
     private const val STATE = "navigation_pack"
+    /** Legacy single-pack verification stamp (apps before pack selection); still honoured. */
     private const val VERIFIED = "verified"
+    private const val VERIFIED_PREFIX = "verified:"
+    private const val SELECTED = "selected"
 
     class Pack(
         val dir: File,
@@ -59,12 +67,36 @@ internal object NavigationPack {
 
     fun root(context: Context): File? = context.getExternalFilesDir(null)?.let { File(it, "navigation") }
 
-    /** First pack directory with a build-info.json, validated without hashing. */
+    /** Installed pack folders (those with a build-info.json), by name. */
+    fun installed(context: Context): List<File> = root(context)?.let(::installedIn) ?: emptyList()
+
+    fun installedIn(root: File): List<File> = root.listFiles()?.filter { File(it, INFO).isFile }?.sortedBy { it.name } ?: emptyList()
+
+    /** Folder name the driver chose, or null. */
+    fun selected(context: Context): String? = state(context).getString(SELECTED, null)
+
+    /** Makes [folder] the pack used by maps, search and routing; Home and the map reload on their next resume. */
+    fun select(context: Context, folder: String) {
+        state(context).edit().putString(SELECTED, folder).apply()
+        OfflineMapStore.touch(context)
+    }
+
+    /**
+     * The pack folder to use among [dirs] (sorted by name): the [selected] one when it is still installed, even if
+     * it is broken (its problem is then shown rather than silently using other data), else the first that [ready]
+     * accepts, else the first.
+     */
+    fun choose(dirs: List<File>, selected: String?, ready: (File) -> Boolean): File? =
+        dirs.firstOrNull { it.name == selected } ?: dirs.firstOrNull(ready) ?: dirs.firstOrNull()
+
+    /** The selected pack (see [choose]), validated without hashing. */
     fun status(context: Context): Status {
         val root = root(context) ?: return Status.Missing
-        val dir = root.listFiles()?.filter { File(it, INFO).isFile }?.minByOrNull { it.name } ?: return Status.Missing
+        val dir = choose(installedIn(root), selected(context)) { read(it) is Status.Ready } ?: return Status.Missing
         return read(dir)
     }
+
+    private fun state(context: Context) = context.applicationContext.getSharedPreferences(STATE, 0)
 
     /** Like [status], plus a full checksum check (cached until the files change). Blocking: worker thread only. */
     @Synchronized
@@ -73,10 +105,11 @@ internal object NavigationPack {
         if (status !is Status.Ready) return status
         val pack = status.pack
         val stamp = stamp(pack)
-        val prefs = context.applicationContext.getSharedPreferences(STATE, 0)
-        if (prefs.getString(VERIFIED, null) == stamp) return status
+        val prefs = state(context)
+        val key = VERIFIED_PREFIX + pack.dir.name
+        if (prefs.getString(key, null) == stamp || prefs.getString(VERIFIED, null) == stamp) return status
         verifyChecksums(pack.dir, pack.checksumsSha256)?.let { return Status.Invalid(it) }
-        prefs.edit().putString(VERIFIED, stamp).apply()
+        prefs.edit().putString(key, stamp).apply()
         return status
     }
 

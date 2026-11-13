@@ -24,9 +24,12 @@ class OfflineMapActivity : Activity() {
     private lateinit var stage: FrameLayout
     private lateinit var notice: TextView
     private var guidance: OfflineGuidance? = null
+    /** Map data revision this screen was built for (changes when the driver picks another pack or region). */
+    private var mapRevision = 0L
 
     override fun onCreate(state: Bundle?) {
         super.onCreate(state)
+        mapRevision = OfflineMapStore.revision(this)
         val ui = UiKit(this)
         window.immersive()
         window.setBackgroundDrawable(ColorDrawable(ui.t.background))
@@ -80,6 +83,8 @@ class OfflineMapActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
+        // Another pack was selected in Settings meanwhile: rebuild so map, search and routing use it together.
+        if (OfflineMapStore.revision(this) != mapRevision) { recreate(); return }
         card.start()
     }
 

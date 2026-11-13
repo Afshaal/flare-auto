@@ -22,6 +22,7 @@ class SmokeActivity : Activity() {
             "widgets" -> AppWidgetActivity::class.java
             "map" -> OfflineMapActivity::class.java
             "nav" -> NavigationCheckActivity::class.java
+            "packs" -> PackSwitchCheckActivity::class.java
             else -> HomeActivity::class.java
         }
         startActivity(Intent(this, target).apply { intent.extras?.let { putExtras(it) } })

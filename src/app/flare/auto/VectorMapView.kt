@@ -243,6 +243,14 @@ internal class VectorMapView(
             return am.deviceConfigurationInfo.reqGlEsVersion >= 0x30000
         }
 
+        /** Why this unit cannot run the MapLibre renderer (shown in settings), or null when it can. */
+        fun unsupportedReason(context: Context): String? = when {
+            !supported(context) -> "needs OpenGL ES 3.0"
+            // Native MapLibre is packaged for these ABIs only (app/build.gradle.kts abiFilters).
+            android.os.Build.SUPPORTED_ABIS.none { it == "arm64-v8a" || it == "x86_64" } -> "not available for this processor"
+            else -> null
+        }
+
         /** MapLibre zoom (512 px tiles) showing [metres] across [widthPx] at [lat]. */
         fun zoomForSpan(metres: Double, widthPx: Int, lat: Double): Double {
             val metresPerPixel = metres / widthPx.coerceAtLeast(1)
