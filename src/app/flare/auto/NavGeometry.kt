@@ -6,10 +6,13 @@ import kotlin.math.*
 internal data class NavStep(val text:String,val sign:Int,val at:Double,val road:String="")
 /**
  * [roads]: (road name, metres) per instruction, for labelling route options ([RouteOptions]); [via]: the point a
- * route option was routed through (null for the fastest route).
+ * route option was routed through (null for the fastest route). [millis]: GraphHopper's travel time, never adjusted;
+ * [stepMillis]: its time per instruction (same order as [steps], summing to [millis]) so the remaining time follows
+ * the speed of each stretch ([TrafficEta.baseAt]); null for routes built without it (average speed is used).
  */
 internal data class NavRoute(val points:DoubleArray,val cumulative:DoubleArray,val steps:List<NavStep>,val distance:Double,val millis:Long,
-                             val roads:List<Pair<String,Double>> = emptyList(),val via:Pair<Double,Double>? = null)
+                             val roads:List<Pair<String,Double>> = emptyList(),val via:Pair<Double,Double>? = null,
+                             val stepMillis:LongArray? = null)
 internal object NavGeometry {
     data class Position(val segment:Int,val along:Double,val away:Double)
     fun distance(a:Double,b:Double,c:Double,d:Double):Double {

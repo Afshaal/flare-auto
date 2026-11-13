@@ -36,7 +36,10 @@ class KeysTest {
             // maplibre-r4: 500 m / 1 km map view span (new key only).
             "offline_map_span_m",
             // route options: point on the chosen alternative, kept on reroutes (new key only).
-            "offline_nav_via")
+            "offline_nav_via",
+            // typical traffic adjustment of arrival estimates (new keys only).
+            "offline_nav_trip_m", "offline_eta_traffic", "offline_eta_peak", "offline_eta_morning", "offline_eta_evening",
+            "offline_eta_school", "offline_eta_school_time", "offline_eta_days")
         val values = constants().values
         assertEquals("a key constant was added, removed or renamed", expected, values.toSet())
         assertEquals("two constants share one key", values.size, values.toSet().size)

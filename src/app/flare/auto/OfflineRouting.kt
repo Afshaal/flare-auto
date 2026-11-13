@@ -38,7 +38,8 @@ internal class OfflineRouting(c: Context) {
               via: Pair<Double, Double>? = null, done: (Result<NavRoute>) -> Unit) {
         val token = ++generation
         worker.execute {
-            val result = runCatching { calculate(fromLat, fromLon, toLat, toLon, expected, via) }
+            // The ETA profile (timing, traffic areas) is built here, off the main thread.
+            val result = runCatching { calculate(fromLat, fromLon, toLat, toLon, expected, via).also { TrafficEta.profile(it) } }
             main.post { if (token == generation) done(result) }
         }
     }
@@ -59,7 +60,7 @@ internal class OfflineRouting(c: Context) {
                     runCatching { calculate(fromLat, fromLon, toLat, toLon, expected, corridor.lat to corridor.lon) }.getOrNull()
                         ?.takeIf { it.millis <= fastest.millis * MAX_OPTION_FACTOR && RouteOptions.refs(it.roads).firstOrNull() != mainRoad }
                 }.distinctBy { RouteOptions.refs(it.roads).firstOrNull() }
-                (listOf(fastest) + options).sortedBy { it.millis }
+                (listOf(fastest) + options).sortedBy { it.millis }.onEach { TrafficEta.profile(it) }
             }
             main.post { if (token == generation) done(result) }
         }
@@ -106,7 +107,8 @@ internal class OfflineRouting(c: Context) {
                 instruction.name.orEmpty())
                 .also { index += instruction.length }
         }
-        return NavRoute(points, distances, steps, path.distance, path.time, path.instructions.map { it.name.orEmpty() to it.distance }, via)
+        return NavRoute(points, distances, steps, path.distance, path.time, path.instructions.map { it.name.orEmpty() to it.distance }, via,
+            stepMillis(path.instructions.map { it.time }, path.time))
     }
 
     private fun engineFor(pack: NavigationPack.Pack): GraphHopper {
@@ -141,5 +143,28 @@ internal class OfflineRouting(c: Context) {
         private const val MAX_OPTION_FACTOR = 1.6
         /** Routing and pack I/O (search, verification) share one thread so they never compete for the graph. */
         val worker = Executors.newSingleThreadExecutor { Thread(it, "flare-routing").apply { isDaemon = true } }
+
+        /**
+         * Time per instruction, summing exactly to the route's [total]. GraphHopper's instruction times are edge
+         * times; with turn costs the route total also contains time spent turning, which no instruction carries.
+         * That remainder is spread over the instructions after the first (each starts with a turn or manoeuvre).
+         * If the instruction times exceed the total, they are scaled down to it.
+         */
+        fun stepMillis(instructions: List<Long>, total: Long): LongArray {
+            val ms = instructions.toLongArray()
+            if (ms.isEmpty()) return ms
+            val sum = ms.sum()
+            val rest = total - sum
+            when {
+                rest > 0 && ms.size > 1 -> { val share = rest / (ms.size - 1); for (i in 1 until ms.size) ms[i] += share; ms[1] += rest - share * (ms.size - 1) }
+                rest > 0 -> ms[0] += rest
+                rest < 0 && sum > 0 -> {
+                    for (i in ms.indices) ms[i] = ms[i] * total / sum
+                    val largest = ms.indices.maxByOrNull { ms[it] } ?: 0
+                    ms[largest] += total - ms.sum()
+                }
+            }
+            return ms
+        }
     }
 }

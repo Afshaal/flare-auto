@@ -6,8 +6,10 @@ import android.location.LocationManager
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.Toast
+import kotlin.math.abs
+import kotlin.math.roundToInt
 
-internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group:LinearLayout):OfflineMapStore.Listener {
+internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,private val group:LinearLayout):OfflineMapStore.Listener {
     private val p=ProfileStore.preferences(a)
     private val refreshers=ArrayList<()->Unit>()
     /** Navigation pack state, checked on the routing thread whenever settings resume. */
@@ -84,6 +86,70 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
                 e.apply();refresh()
             }.show()
         }
+        trafficSettings(row = { name, value, action -> row(name, value, action) }, visible = ::visible)
+    }
+
+    /**
+     * Typical traffic adjustment ([TrafficEta]): off by default; its details show only while it is on. These are
+     * delays the driver sets for two local areas, not live traffic, and they never change the chosen route.
+     */
+    private fun trafficSettings(row:(String,()->String,()->Unit)->android.view.View, visible:(android.view.View,Boolean)->Unit) {
+        fun s()=TrafficEta.read(p)
+        val traffic=ui.toggle("Typical traffic adjustment",s().enabled,Runnable {
+            p.edit().putBoolean(Keys.OFFLINE_ETA_TRAFFIC,!s().enabled).apply();refresh()
+        })
+        ui.add(group,traffic)
+        val note=ui.text("Adds the delay you set to arrival estimates: Wapda Town to Barkat Market (morning and evening) and " +
+            "Jail Road (school dismissal), for trips over 5 km (full from 10 km). Approximate and user-configured; " +
+            "not live traffic, and routes are not changed.",13,ui.t.textSecondary).apply { setPadding(ui.dp(16),ui.dp(8),ui.dp(16),ui.dp(10)) }
+        ui.add(group,note)
+        val peak=row("Peak delay multiplier",{ "%.1f×".format(java.util.Locale.US,s().peak) }) {
+            val choices=TrafficEta.PEAK_CHOICES
+            ThemedDialogs.Builder(a).setTitle("Peak delay multiplier")
+                .setSingleChoiceItems(choices.map { "%.1f×".format(java.util.Locale.US,it) }.toTypedArray(),choices.indexOfFirst { abs(it-s().peak)<.01 }) { d,i->
+                    p.edit().putInt(Keys.OFFLINE_ETA_PEAK,(choices[i]*10).roundToInt()).apply();d.dismiss();refresh()
+                }.setNegativeButton("Cancel",null).show()
+        }
+        val morning=row("Morning peak",{ s().morning.label }) { editWindow("Morning peak",Keys.OFFLINE_ETA_MORNING,s().morning) }
+        val evening=row("Evening peak",{ s().evening.label }) { editWindow("Evening peak",Keys.OFFLINE_ETA_EVENING,s().evening) }
+        val school=ui.toggle("School dismissal (Jail Road)",s().schoolEnabled,Runnable {
+            p.edit().putBoolean(Keys.OFFLINE_ETA_SCHOOL,!s().schoolEnabled).apply();refresh()
+        })
+        ui.add(group,school)
+        val schoolTime=row("School dismissal time",{ s().school.label }) { editWindow("School dismissal",Keys.OFFLINE_ETA_SCHOOL_TIME,s().school) }
+        val days=row("Days",{ dayLabel(s().days) }) { chooseDays() }
+        refreshers.add {
+            val st=s()
+            traffic.setChecked(st.enabled,"Typical traffic adjustment");school.setChecked(st.schoolEnabled,"School dismissal")
+            listOf(note,peak,morning,evening,school,days).forEach { visible(it,st.enabled) }
+            visible(schoolTime,st.enabled && st.schoolEnabled)
+        }
+    }
+
+    private fun editWindow(title:String,key:String,current:TrafficEta.Window) {
+        val input=EditText(a).apply { setSingleLine();hint="07:30-09:30";setText(current.stored);setTextColor(ui.t.textPrimary) }
+        ThemedDialogs.Builder(a).setTitle(title).setMessage("Start and end time, 24-hour (for example 07:30-09:30).").setView(input)
+            .setPositiveButton("Save") { _,_->
+                val w=TrafficEta.Window.parse(input.text.toString())
+                if(w==null) Toast.makeText(a,"Enter a time range such as 07:30-09:30",Toast.LENGTH_SHORT).show()
+                else { p.edit().putString(key,w.stored).apply();refresh() }
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun chooseDays() {
+        val names=arrayOf("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday")
+        val checked=BooleanArray(7) { TrafficEta.read(p).days and (1 shl it)!=0 }
+        ThemedDialogs.Builder(a).setTitle("Days with these delays").setMultiChoiceItems(names,checked) { _,i,on-> checked[i]=on }
+            .setPositiveButton("Save") { _,_->
+                p.edit().putInt(Keys.OFFLINE_ETA_DAYS,(0 until 7).filter { checked[it] }.fold(0) { m,i-> m or (1 shl i) }).apply();refresh()
+            }.setNegativeButton("Cancel",null).show()
+    }
+
+    private fun dayLabel(days:Int):String = when(days) {
+        TrafficEta.WEEKDAYS -> "Monday–Friday"
+        0b1111111 -> "Every day"
+        0 -> "None"
+        else -> listOf("Mon","Tue","Wed","Thu","Fri","Sat","Sun").filterIndexed { i,_-> days and (1 shl i)!=0 }.joinToString(", ")
     }
     /** The pack's name as built (e.g. "Lahore"); ids and revisions stay internal. */
     private fun packLabel(pack:NavigationPack.Pack):String = pack.region

@@ -52,7 +52,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     /** Full map while driving: the other routes computed with the chosen one, with their ETA comparison. */
     val alternativesCard=RouteListCard(c,"Other routes",null)
     /** Alternatives still ahead of their split from the chosen route ([NavMotion.divergesAt]). */
-    private class Alternative(val route:NavRoute,val label:String,val eta:String,val splitAt:Double)
+    private class Alternative(val route:NavRoute,val label:String,val splitAt:Double)
     private var alternatives:List<Alternative> = emptyList()
     /** Overview waiting for Start: the options, the selected one, and where the car was when they were shown. */
     private var options:List<NavRoute>?=null
@@ -62,6 +62,17 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private var optionsFrom:Location?=null
     /** Called whenever guidance starts or stops (the host may show or hide related controls). */
     var onActiveChanged:((Boolean)->Unit)?=null
+    /**
+     * Planned length of the current journey ([TrafficEta] distance scaling): set when the journey's first route is
+     * applied, kept on reroutes, restored with the destination (shared by the Home widget and the full map through
+     * [Keys.OFFLINE_NAV_TRIP_M]) and cleared when a new destination is chosen or the journey ends.
+     */
+    private var tripMetres:Double?=p.getString(Keys.OFFLINE_NAV_TRIP_M,null)?.toDoubleOrNull()
+    /** Schedule part of the traffic adjustment, refreshed at most every [ETA_REFRESH_MS] (the rest is cached). */
+    private var schedule=TrafficEta.Schedule.NONE
+    private var scheduleAt=0L
+    /** Progress along the current route at the last fix (for the periodic refresh). */
+    private var lastAlong=0.0
 
     init {
         tripCard.onEnd={ stopRoute() }
@@ -86,11 +97,37 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
                 val cached=cachedRoute
                 if(cached!=null && cachedKey==key(pack,lat,lon)) {
                     route=cached;map.showRoute(cached);turnCard.message("Continue towards ${place.name}")
-                    tripCard.show(cached.distance,cached.millis,p.clock24)
+                    tripCard.show(cached.distance,eta(cached,0.0),p.clock24)
                 }
             }
         }
+        main.postDelayed(object:Runnable { override fun run() { if(closed) return;refreshEta();main.postDelayed(this,ETA_REFRESH_MS) } },ETA_REFRESH_MS)
     }
+
+    /**
+     * The one estimate every display uses (overview, trip card on the full map and the Home widget, alternatives):
+     * remaining time from [along] metres into [path], with the typical traffic adjustment when it is on. [journey]:
+     * the journey length that scales it (the planned trip; an option's own length while choosing).
+     */
+    private fun eta(path:NavRoute,along:Double,journey:Double?=null):Long {
+        val now=SystemClock.elapsedRealtime()
+        if(scheduleAt==0L || now-scheduleAt>=ETA_REFRESH_MS) { schedule=TrafficEta.scheduleNow(TrafficEta.read(p));scheduleAt=now }
+        return TrafficEta.remaining(path,along,schedule,journey ?: tripMetres ?: path.distance)
+    }
+
+    /** Periodic refresh (schedule windows change over time): redraws the shown estimates from cached progress. */
+    private fun refreshEta() {
+        scheduleAt=0L
+        val found=options
+        if(found!=null) { optionsCard.show(RouteOptions.summaries(found) { eta(it,0.0,it.distance) },selected);showSelected();return }
+        val path=route ?: return
+        if(calculating) return
+        if(preview) tripCard.show(path.distance,eta(path,0.0),p.clock24)
+        else tripCard.show((path.cumulative.last()-lastAlong).coerceAtLeast(0.0),eta(path,lastAlong),p.clock24)
+        if(alternatives.isNotEmpty()) showAlternatives()
+    }
+
+    private fun startJourney() { tripMetres=null;p.edit().remove(Keys.OFFLINE_NAV_TRIP_M).apply() }
 
     /** True while a destination is set (guiding, calculating, previewing or waiting for GPS). */
     val active:Boolean get() = target!=null
@@ -110,7 +147,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         endOverview();clearAlternatives()
         if(!pack.covers(place.lat,place.lon)) { turnCard.message("Outside ${pack.region} driving coverage");return }
         fun begin(lat:Double,lon:Double,asPreview:Boolean) {
-            target=place;route=null;map.showRoute(null);tripCard.hide();tripCard.starred(saved.isStarred(place))
+            target=place;route=null;lastAlong=0.0;startJourney();map.showRoute(null);tripCard.hide();tripCard.starred(saved.isStarred(place))
             p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply();calculate(lat,lon,asPreview,true);onActiveChanged?.invoke(true)
         }
         val fix=location
@@ -157,14 +194,14 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         map.overview(found)
         optionsCard.onPick={ i-> if(options===found) { selected=i;showSelected() } }
         optionsCard.onAction={ if(options===found) pick(selected) }
-        optionsCard.show(RouteOptions.summaries(found),0)
+        optionsCard.show(RouteOptions.summaries(found) { eta(it,0.0,it.distance) },0)
     }
 
     private fun showSelected() {
         val found=options ?: return
         val chosen=found[selected]
         map.showRoute(chosen);map.showAlternatives(found.filterIndexed { i,_->i!=selected })
-        tripCard.show(chosen.distance,chosen.millis,p.clock24);optionsCard.select(selected)
+        tripCard.show(chosen.distance,eta(chosen,0.0,chosen.distance),p.clock24);optionsCard.select(selected)
     }
 
     /** Starts guidance on option [i] of the overview; the other options stay as gray alternatives until passed. */
@@ -180,7 +217,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         if(asPreview) return
         val labels=RouteOptions.labels(found.map { it.roads })
         alternatives=found.indices.filter { it!=i }.mapNotNull { j->
-            NavMotion.divergesAt(found[i],found[j])?.let { split-> Alternative(found[j],labels[j],NavMotion.compare(found[j].millis,found[i].millis),split) }
+            NavMotion.divergesAt(found[i],found[j])?.let { split-> Alternative(found[j],labels[j],split) }
         }
         showAlternatives()
     }
@@ -197,7 +234,20 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         if(compact) return
         val list=alternatives
         alternativesCard.onPick={ i-> list.getOrNull(i)?.let { switchTo(it) } }
-        if(list.isEmpty()) alternativesCard.hide() else alternativesCard.show(list.map { "${it.label} · ${it.eta}" },-1)
+        if(list.isEmpty()) { alternativesCard.hide();return }
+        val chosen=route ?: return
+        alternativesCard.show(list.map { "${it.label} · ${compare(it.route,chosen)}" },-1)
+    }
+
+    /**
+     * ETA comparison of an alternative with the chosen route, both from the car's current place: the chosen route's
+     * remaining time against the alternative's remaining time from the same point (the stretch before the split is
+     * shared), so a partly driven trip is never compared with a whole one.
+     */
+    private fun compare(alt:NavRoute,chosen:NavRoute):String {
+        val fix=location
+        val altAlong=if(fix!=null && lastAlong>0.0) NavGeometry.nearest(alt,fix.latitude,fix.longitude,0).along else 0.0
+        return NavMotion.compare(eta(alt,altAlong),eta(chosen,lastAlong))
     }
 
     /** Drives the alternative instead: routes from the car through that option's point (one calculation). */
@@ -212,11 +262,13 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
 
     private fun apply(path:NavRoute,dest:OfflineDestinationPicker.Place,asPreview:Boolean) {
         calculating=false
-        route=path;segment=0;spoken=-1;offRoute=0;map.showRoute(path)
+        route=path;segment=0;spoken=-1;offRoute=0;lastAlong=0.0;map.showRoute(path)
+        // The journey's planned length is fixed by its first route; reroutes and restored routes keep it.
+        if(tripMetres==null) { tripMetres=path.distance;if(!asPreview) p.edit().putString(Keys.OFFLINE_NAV_TRIP_M,path.distance.toString()).apply() }
         if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(pack,dest.lat,dest.lon) }
         p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,!asPreview).putString(Keys.OFFLINE_NAV_LAT,dest.lat.toString()).putString(Keys.OFFLINE_NAV_LON,dest.lon.toString()).putString(Keys.OFFLINE_NAV_NAME,dest.name).apply()
         turnCard.message(if(asPreview) "Route preview · ${dest.name}" else "Continue towards ${dest.name}")
-        tripCard.show(path.distance,path.millis,p.clock24)
+        tripCard.show(path.distance,eta(path,0.0),p.clock24)
         if(!asPreview) { initVoice();location?.let { update(it) } }
     }
 
@@ -251,6 +303,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             return
         }
         offRoute=0
+        lastAlong=position.along
         map.routeProgress(position.segment,position.along)
         if(alternatives.any { position.along>it.splitAt }) { alternatives=alternatives.filter { position.along<=it.splitAt };showAlternatives() }
         val remaining=(path.cumulative.last()-position.along).coerceAtLeast(0.0)
@@ -262,7 +315,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         val metres=(step.at-position.along).coerceAtLeast(0.0)
         val road=if(step.sign==TurnArrow.FINISH) target?.name.orEmpty() else TripFormat.road(step)
         turnCard.turn(step.sign,metres,road)
-        tripCard.show(remaining,(path.millis*(remaining/path.cumulative.last().coerceAtLeast(1.0))).toLong(),p.clock24)
+        tripCard.show(remaining,eta(path,position.along),p.clock24)
         if(next!=spoken && metres<200) { spoken=next;val said=speakable(step.text);speak(if(metres>50) "In ${metres.toInt()} metres, $said" else said) }
     }
 
@@ -270,7 +323,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         val name=target?.name.orEmpty()
         speak("You have arrived near your destination")
         endOverview();clearAlternatives()
-        cachedRoute=null;cachedKey=null;route=null;target=null;preview=false
+        cachedRoute=null;cachedKey=null;route=null;target=null;preview=false;startJourney()
         p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply()
         map.showRoute(null);tripCard.hide();turnCard.message("You have arrived · $name")
         onActiveChanged?.invoke(false)
@@ -298,7 +351,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
 
     fun stopRoute() {
         endOverview();clearAlternatives()
-        cachedRoute=null;cachedKey=null;engine.close();route=null;target=null;calculating=false;preview=false
+        cachedRoute=null;cachedKey=null;engine.close();route=null;target=null;calculating=false;preview=false;startJourney()
         p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply();map.showRoute(null)
         voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null
         turnCard.hide();tripCard.hide();onActiveChanged?.invoke(false)
@@ -314,6 +367,8 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         private const val VIA_PASSED_M=2000.0
         /** The car moved this far while the route overview was open: start guidance on the selected route. */
         private const val OVERVIEW_START_M=80f
+        /** Typical traffic adjustment: schedule refresh while navigation is shown (progress uses cached data). */
+        private const val ETA_REFRESH_MS=30_000L
         /** Includes the pack, so a route from one pack is never reused after switching to another. */
         private fun key(pack:NavigationPack.Pack,lat:Double,lon:Double)="${pack.dir.absolutePath}|${pack.id}|$lat,$lon"
         /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */

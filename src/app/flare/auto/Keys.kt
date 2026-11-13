@@ -137,6 +137,17 @@ internal object Keys {
     const val OFFLINE_NAV_VOICE = "offline_nav_voice"
     /** Point ("lat,lon") on the route option the driver chose, kept when rerouting; absent for the fastest route. */
     const val OFFLINE_NAV_VIA = "offline_nav_via"
+    /** Planned length (metres) of the current journey, fixed when it starts and kept on reroutes ([TrafficEta]). */
+    const val OFFLINE_NAV_TRIP_M = "offline_nav_trip_m"
+    /** Typical traffic adjustment of arrival estimates ([TrafficEta]): on/off (default off), peak multiplier in
+     *  tenths (default 20 = 2.0x), "HH:MM-HH:MM" windows, school window on/off, weekday bitmask (bit 0 = Monday). */
+    const val OFFLINE_ETA_TRAFFIC = "offline_eta_traffic"
+    const val OFFLINE_ETA_PEAK = "offline_eta_peak"
+    const val OFFLINE_ETA_MORNING = "offline_eta_morning"
+    const val OFFLINE_ETA_EVENING = "offline_eta_evening"
+    const val OFFLINE_ETA_SCHOOL = "offline_eta_school"
+    const val OFFLINE_ETA_SCHOOL_TIME = "offline_eta_school_time"
+    const val OFFLINE_ETA_DAYS = "offline_eta_days"
     /** Offline search (JSON, per driver profile): starred places, recent destinations, the Home and Work slots. */
     const val OFFLINE_PLACES_STARRED = "offline_places_starred"
     const val OFFLINE_PLACES_RECENT = "offline_places_recent"

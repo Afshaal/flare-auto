@@ -36,13 +36,15 @@ internal object RouteOptions {
     }
 
     /** One line per option: "Fastest · 3 h 32 min · 294 km · via N-5", "+17 min · 3 h 49 min · 377 km · via M-2". */
-    fun summaries(routes: List<NavRoute>): List<String> {
+    /** One line per option; durations from [eta] (the displayed estimate, [TrafficEta]; raw time by default). */
+    fun summaries(routes: List<NavRoute>, eta: (NavRoute) -> Long = { it.millis }): List<String> {
         val labels = labels(routes.map { it.roads })
-        val fastest = routes.minOfOrNull { it.millis } ?: 0L
+        val times = routes.map(eta)
+        val fastest = times.minOrNull() ?: 0L
         return routes.mapIndexed { i, r ->
-            val extra = r.millis - fastest
+            val extra = times[i] - fastest
             val head = if (extra < 60000) "Fastest" else "+${TripFormat.duration(extra)}"
-            "$head · ${TripFormat.duration(r.millis)} · ${TripFormat.distance(r.distance)} · ${labels[i]}"
+            "$head · ${TripFormat.duration(times[i])} · ${TripFormat.distance(r.distance)} · ${labels[i]}"
         }
     }
 
