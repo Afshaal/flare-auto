@@ -244,46 +244,52 @@ class GridEditorActivity:Activity() {
         renderer.albumArt?.setImageDrawable(MediaGlyph("note",ui.t.accent));renderer.elapsed?.text="1:24";renderer.total?.text="3:00"
         return CardFrame(this,cell,type)
     }
+    /**
+     * "Add widget" / "Change widget": a full-screen drawer with the widget groups as tabs and the styles as cards
+     * (live sample, name, the sizes that fit on this page, "New page"). Choosing a size places the widget at once
+     * and selects it ([addChosen]); installed app widgets have their own tab.
+     */
     private fun gallery(index:Int) {
         if(page !in pages.indices) { Toast.makeText(this,"Tap + to create a page first",Toast.LENGTH_SHORT).show();return }
-        val scroll=ScrollView(this);val list=ui.column();scroll.addView(list)
-        val dialog=ThemedDialogs.Builder(this).setTitle("Widget gallery").setView(scroll).setNegativeButton("Close",null).create()
-        list.addView(ui.section("Installed applications"))
-        list.addView(ui.valueRow("Installed app widgets","Browse",Runnable { widgetReplacement=index;dialog.dismiss();startActivityForResult(Intent(this,WidgetPickerActivity::class.java),720) }))
-        var group=""
-        WidgetCatalog.styles.forEach { style->
-            if(group!=style.group) { group=style.group;list.addView(ui.section(group)) }
-            list.addView(ui.text(style.name,16,ui.t.textPrimary))
-            val size=style.sizes.first();val preview=sample(style.type,size.first,size.second)
-            list.addView(preview,LinearLayout.LayoutParams(MATCH,ui.dp(170)))
-            val sizes=LinearLayout(this);list.addView(sizes)
-            style.sizes.forEach { (w,h)->
-                val others=pages[page].filterIndexed { n,_->n!=index }
-                val valid=GridTile(style.type,0,0,w,h).valid() && WidgetCatalog.fit(others,style.type,w,h)!=null
-                val button=ui.text("${w}×${h}",14,ui.t.accent).apply {
-                    gravity=Gravity.CENTER;minimumHeight=ui.dp(48);isEnabled=valid;alpha=if(valid) 1f else .3f
-                    setOnClickListener {
-                        val others=pages[page].filterIndexed { n,_->n!=index }
-                        val old=pages[page].getOrNull(index)
-                        val atOld=old?.copy(type=style.type,w=w,h=h)?.takeIf { it.valid() && others.none { t->t.overlaps(it) || t.type==it.type } }
-                        val fit=atOld ?: WidgetCatalog.fit(others,style.type,w,h)
-                        if(fit!=null) { dialog.dismiss();addChosen(fit,index) }
-                        else ThemedDialogs.Builder(this@GridEditorActivity).setTitle("No space for this size").setMessage("Choose a smaller size, resize another widget, or add a new page.")
-                            .setPositiveButton("New page") { _,_->if(pages.size<5) { pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,w,h),-1);dialog.dismiss() } }
-                            .setNegativeButton("Back",null).show()
-                    }
-                };sizes.addView(button,LinearLayout.LayoutParams(0,WRAP,1f))
-            }
-            val addPageRow=LinearLayout(this)
-            command(addPageRow,"Add on a new page") {
-                if(pages.size<5) {
-                    val size=style.sizes.first()
-                    pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,size.first,size.second),-1)
-                    dialog.dismiss()
-                } else Toast.makeText(this,"Five pages maximum",Toast.LENGTH_SHORT).show()
-            }
-            list.addView(addPageRow)
-        };dialog.show()
+        val drawer=EditorDrawer(this,ui,if(index>=0) "Change widget" else "Add widget")
+        fun choose(style:WidgetCatalog.Style,w:Int,h:Int) {
+            val others=pages[page].filterIndexed { n,_->n!=index }
+            val old=pages[page].getOrNull(index)
+            val atOld=old?.copy(type=style.type,w=w,h=h)?.takeIf { it.valid() && others.none { t->t.overlaps(it) || t.type==it.type } }
+            val fit=atOld ?: WidgetCatalog.fit(others,style.type,w,h)
+            if(fit!=null) { drawer.dismiss();addChosen(fit,index) }
+            else ThemedDialogs.Builder(this).setTitle("No space for this size").setMessage("Choose a smaller size, resize another widget, or add a new page.")
+                .setPositiveButton("New page") { _,_->if(pages.size<5) { pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,w,h),-1);drawer.dismiss() } }
+                .setNegativeButton("Back",null).show()
+        }
+        fun newPage(style:WidgetCatalog.Style) {
+            if(pages.size>=5) { Toast.makeText(this,"Five pages maximum",Toast.LENGTH_SHORT).show();return }
+            val size=style.sizes.first()
+            pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,size.first,size.second),-1)
+            drawer.dismiss()
+        }
+        val others=pages[page].filterIndexed { n,_->n!=index }
+        val groups=WidgetCatalog.styles.groupBy { it.group }
+        val categories=groups.map { (group,styles)->
+            EditorDrawer.Category(group,styles.map { style-> {
+                val size=style.sizes.first()
+                val chips=style.sizes.map { (w,h)->
+                    val valid=GridTile(style.type,0,0,w,h).valid() && WidgetCatalog.fit(others,style.type,w,h)!=null
+                    EditorDrawer.Chip("${w}×${h}",valid,primary=valid) { choose(style,w,h) }
+                }+EditorDrawer.Chip("+ Page",pages.size<5) { newPage(style) }
+                drawer.card(sample(style.type,size.first,size.second),style.name,chips)
+            } })
+        }+EditorDrawer.Category("Installed apps",listOf({
+            val note=ui.column().apply { gravity=Gravity.CENTER }
+            note.addView(EditorIcon(this,"add",ui.t.textSecondary),LinearLayout.LayoutParams(ui.dp(40),ui.dp(40)))
+            note.addView(ui.text("Widgets from apps installed on this unit",14,ui.t.textSecondary).apply { gravity=Gravity.CENTER;setPadding(ui.dp(12),ui.dp(8),ui.dp(12),0) })
+            drawer.card(note,"Installed app widgets",listOf(EditorDrawer.Chip("Browse",primary=true) {
+                widgetReplacement=index;drawer.dismiss();startActivityForResult(Intent(this,WidgetPickerActivity::class.java),720)
+            }))
+        }))
+        val current=pages[page].getOrNull(index)?.type
+        val initial=WidgetCatalog.styles.firstOrNull { it.type==current }?.let { s->groups.keys.indexOf(s.group) } ?: 0
+        drawer.show(categories,initial,columns=2,rows=2)
     }
     private fun appearance() {
         ThemedDialogs.Builder(this).setTitle("Home appearance").setItems(arrayOf("Theme","Wallpaper","Accent color","Vehicle name color","Badge color","Clock & vehicle","Dock appearance")) { _,i->when(i) {
@@ -366,13 +372,20 @@ class GridEditorActivity:Activity() {
             "Map left · media + clock" to listOf(GridTile("offline_map",0,0,5,6),GridTile("media_wide",5,0,3,3),GridTile("clock_minimal",5,3,3,3)),
             "Map right · clock + media" to listOf(GridTile("clock_minimal",0,0,3,3),GridTile("media_wide",0,3,3,3),GridTile("offline_map",3,0,5,6)),
             "Map above · media + clock" to listOf(GridTile("offline_map",0,0,8,4),GridTile("media_compact",0,4,4,2),GridTile("clock_minimal",4,4,4,2)))
-        val scroll=ScrollView(this);val list=ui.column();scroll.addView(list)
-        val dialog=ThemedDialogs.Builder(this).setTitle("Ready-made layouts").setView(scroll).setNegativeButton("Cancel",null).create()
-        layouts.forEach { (name,tiles)->
-            list.addView(ui.text(name,16,ui.t.textPrimary));val board=GridBoard(this,tiles.toMutableList())
-            tiles.forEach { board.addView(sample(it.type,it.w,it.h)) };list.addView(board,LinearLayout.LayoutParams(MATCH,ui.dp(180)))
-            val use=LinearLayout(this);command(use,"Use $name") { edit { pages[page]=tiles.toMutableList();selected=-1 };dialog.dismiss() };list.addView(use)
-        };dialog.show()
+        // Grouped like the widget drawer: tabs on the left, a page of previews on the right.
+        val groups=listOf("Classic" to layouts.take(3),"Three cards" to layouts.subList(3,9),"With map" to layouts.subList(9,12))
+        val drawer=EditorDrawer(this,ui,"Ready-made layouts")
+        val categories=groups.map { (group,items)->
+            EditorDrawer.Category(group,items.map { (name,tiles)-> {
+                val board=GridBoard(this,tiles.toMutableList());tiles.forEach { board.addView(sample(it.type,it.w,it.h)) }
+                // Inside a tab the group is already named: "Three cards · clock left" shows as "Clock left".
+                val title=if(group=="Three cards") name.substringAfter("· ").replaceFirstChar { it.uppercase() } else name
+                drawer.card(board,title,listOf(EditorDrawer.Chip("Use this layout",primary=true) {
+                    edit { pages[page]=tiles.toMutableList();selected=-1 };drawer.dismiss()
+                }))
+            } })
+        }
+        drawer.show(categories,0,columns=3,rows=2)
     }
     private fun defaultLayout()=mutableListOf(GridTile("clock",0,0,4,6),GridTile("media",4,0,4,6))
     private fun movePage(direction:Int) {

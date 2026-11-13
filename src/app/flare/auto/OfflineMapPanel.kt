@@ -21,7 +21,7 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
      * packs), the map renderer ("MapLibre · 3D" or "Mapsforge · 2D", stored in [Keys.OFFLINE_MAP_VECTOR]) with the
      * controls of the renderer in use only (orientation for MapLibre; "Other regions" for Mapsforge, which gathers
      * the region actions: catalog, URL, download, import, remove), then the shared following and map view controls.
-     * Attribution lives on the map ("i" button) and in About › Open-source credits.
+     * Attribution lives in About › Open-source credits (with the installed pack's sources).
      */
     init {
         val enabled=ui.toggle("Enable offline maps",p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false),Runnable {
@@ -48,18 +48,22 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
             ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up 3D","North-up")) { _,i->
                 p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
         }
-        // Mapsforge · 2D only: map files outside the navigation pack.
-        val buildings=row("3D buildings",{
-            if ((pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings == null) "Data not installed"
-            else if(p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false)) "On" else "Off"
-        }) {
-            if ((pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings == null) {
-                Toast.makeText(a,"Install a map pack with building heights",Toast.LENGTH_SHORT).show()
-            } else {
+        // A switch like the other on/off settings (default off); dimmed when the pack has no building heights.
+        fun hasBuildings()=(pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings!=null
+        val buildings=ui.toggle("3D buildings",p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false),Runnable {
+            if(!hasBuildings()) Toast.makeText(a,"This map pack has no building heights",Toast.LENGTH_SHORT).show()
+            else {
                 p.edit().putBoolean(Keys.OFFLINE_MAP_BUILDINGS,!p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false)).apply()
                 OfflineMapStore.touch(a);refresh()
             }
+        })
+        ui.add(group,buildings)
+        refreshers.add {
+            val available=hasBuildings()
+            buildings.setChecked(available && p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false),"3D buildings")
+            buildings.alpha=if(available) 1f else .45f
         }
+        // Mapsforge · 2D only: map files outside the navigation pack.
         val otherRegions=row("Other regions",{ regionValue() }) { regions() }
         refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(buildings,vector);visible(otherRegions,!vector) }
         // Shared by both renderers.
@@ -81,8 +85,8 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
             }.show()
         }
     }
-    private fun packLabel(pack:NavigationPack.Pack):String = pack.id.substringAfterLast('-').removePrefix("r").toIntOrNull()
-        ?.let { "${pack.region} · revision $it" } ?: pack.region
+    /** The pack's name as built (e.g. "Lahore"); ids and revisions stay internal. */
+    private fun packLabel(pack:NavigationPack.Pack):String = pack.region
     private fun packValue():String = when(val s=pack) {
         null -> "Checking…"
         is NavigationPack.Status.Ready -> packLabel(s.pack)
@@ -103,7 +107,9 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
         val current=(pack as? NavigationPack.Status.Ready)?.pack?.dir?.name ?: NavigationPack.selected(a)
         val labels=list.map { (dir,status)->
             when(status) {
-                is NavigationPack.Status.Ready -> "${packLabel(status.pack)}  (${dir.name})"
+                // The folder is shown only to tell apart two packs with the same name.
+                is NavigationPack.Status.Ready -> packLabel(status.pack) +
+                    (if(list.count { (it.second as? NavigationPack.Status.Ready)?.pack?.region==status.pack.region }>1) "  (${dir.name})" else "")
                 is NavigationPack.Status.Invalid -> "${dir.name} · unusable: ${status.reason}"
                 NavigationPack.Status.Missing -> dir.name
             }

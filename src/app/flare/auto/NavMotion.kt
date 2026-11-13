@@ -21,6 +21,10 @@ internal object NavMotion {
     /** Gaps longer than this, or jumps farther than [GLIDE_MAX_M], are drawn at once. */
     const val GLIDE_MAX_GAP_MS = 5000L
     const val GLIDE_MAX_M = 150.0
+    /** Glide frames: at most about 30 per second, and only as many as visibly move or turn the picture. */
+    const val MIN_FRAME_MS = 32L
+    const val PX_PER_FRAME = 1.5
+    const val DEG_PER_FRAME = 1.0
     /** ETA differences under this read "Similar ETA". */
     const val SIMILAR_MS = 3 * 60_000L
 
@@ -57,6 +61,20 @@ internal object NavMotion {
      */
     fun glide(gapMs: Long, metres: Double): Long? =
         if (gapMs <= 0 || gapMs > GLIDE_MAX_GAP_MS || !metres.isFinite() || metres > GLIDE_MAX_M) null else gapMs.coerceIn(250L, 1000L)
+
+    /**
+     * Time between glide frames for a glide of [durationMs] that moves the marker [pixels] on screen and turns it
+     * (or, heading-up, the whole map) [degrees]: about one frame per 1.5 px or 1°, at most one per [MIN_FRAME_MS].
+     * Null when one step is enough (a wide view where the car moves less than a couple of pixels per fix): the fix is
+     * then drawn at once instead of redrawing an unchanged picture ~30 times. Redrawing a wide, tilted map is what
+     * made the 3D view lag on the head unit.
+     */
+    fun glideFrameMs(durationMs: Long, pixels: Double, degrees: Double): Long? {
+        if (!pixels.isFinite()) return MIN_FRAME_MS
+        val steps = maxOf(pixels / PX_PER_FRAME, abs(degrees) / DEG_PER_FRAME)
+        if (steps < 2.0) return null
+        return maxOf(MIN_FRAME_MS, (durationMs / steps).toLong())
+    }
 
     /** Heading between [from] and [to] (degrees) at fraction [f], turning the short way. */
     fun turn(from: Double, to: Double, f: Float): Double = HeadingFilter.normalize(from + HeadingFilter.shortest(to - from) * f)

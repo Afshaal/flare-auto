@@ -249,9 +249,9 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         } catch(e:Exception) { source.close();stop();label.text="Map unavailable\n${e.message.orEmpty()}" }
     }
     /**
-     * Attribution and status. Full map: a small "i" button opening the attribution dialog (keeps
-     * "© OpenStreetMap contributors" one tap away); Home widget: a tiny "© OSM" mark. Status messages (fallback
-     * reason, outside coverage) appear in a small pill at the top centre only while they apply.
+     * Attribution and status. Full map: credits are in Settings › About › Open-source credits (with the installed
+     * pack's sources); Home widget: a tiny "© OSM" mark. Status messages (fallback reason, outside coverage) appear
+     * in a small pill at the top centre only while they apply.
      */
     private fun addCredit(text:String,override:String?) {
         val status=TextView(context).apply {
@@ -266,20 +266,11 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
                 this.text="© OSM";textSize=9f;setTextColor(0xccffffff.toInt());setShadowLayer(2f,0f,0f,0xff000000.toInt())
                 contentDescription="Map data © OpenStreetMap contributors"
             },LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,(8*density).toInt(),(4*density).toInt()) })
-            return
         }
-        val info=context.mapButton(MapIcon("info",NavColors.TEXT),"Map attribution",32) { attribution() }
-        addView(info,LayoutParams((32*density).toInt(),(32*density).toInt(),Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,(24*density).toInt(),(12*density).toInt()) })
     }
     private fun setStatus(text:String) {
         val s=statusLine ?: return
         s.text=text;s.visibility=if(text.isBlank()) View.GONE else View.VISIBLE
-    }
-    private fun attribution() {
-        ThemedDialogs.Builder(a).setTitle("Map attribution").setMessage("© OpenStreetMap contributors · ODbL 1.0\nhttps://www.openstreetmap.org/copyright\n" +
-            (if(vectorMap!=null) "Rendered offline with MapLibre Native (BSD-2-Clause). Labels: Noto Sans, SIL OFL 1.1." else "Rendered offline using Mapsforge.") +
-            " Routing: GraphHopper (Apache-2.0). License notices are included with this app." +
-            (navPack?.searchCredit?.let { "\nSearch data: $it." } ?: "")).setPositiveButton("Close",null).show()
     }
     /**
      * Home preview overlay while navigating: the compact turn indicator (arrow and distance) top-left and the trip
@@ -320,7 +311,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     }
     /**
      * Right-hand controls of the full map: search at the top, then recenter, orientation (vector map) and voice;
-     * zoom in / out as one pill above the attribution button at the bottom (Mapsforge keeps its own zoom buttons).
+     * zoom in / out as one pill at the bottom (Mapsforge keeps its own zoom buttons).
      */
     private fun addButtons(vector:Boolean) {
         val side=(48*density).toInt();val gap=(10*density).toInt();val edge=(16*density).toInt()
@@ -341,7 +332,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         if(vector) {
             val zoom=context.mapButtonPair(context.mapButton(MapIcon("plus",NavColors.TEXT),"Zoom in") { vectorMap?.zoomBy(1.0) },
                 context.mapButton(MapIcon("minus",NavColors.TEXT),"Zoom out") { vectorMap?.zoomBy(-1.0) })
-            addView(zoom,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,edge,(56*density).toInt()) })
+            addView(zoom,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,edge,edge) })
         }
     }
     private fun headingUp()=p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)

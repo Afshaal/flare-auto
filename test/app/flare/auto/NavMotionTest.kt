@@ -48,6 +48,18 @@ class NavMotionTest {
     }
 
     @Test
+    fun glideFramesOnlyWhenThePictureVisiblyChanges() {
+        // Close view: 12 m/s is ~60 px per fix, so the full ~30 fps.
+        assertEquals(32L, NavMotion.glideFrameMs(1000, 60.0, 0.0))
+        // Wide tilted view (zoom ~12.5): under a pixel per fix and no turn, drawn once per fix.
+        assertNull(NavMotion.glideFrameMs(1000, 0.5, 0.0))
+        // Same view while turning 10° heading-up: the map rotates visibly, about one frame per degree.
+        assertEquals(100L, NavMotion.glideFrameMs(1000, 0.5, 10.0))
+        assertEquals(200L, NavMotion.glideFrameMs(1000, 7.5, 0.0))
+        assertEquals(32L, NavMotion.glideFrameMs(1000, Double.POSITIVE_INFINITY, 0.0))
+    }
+
+    @Test
     fun streetComesFromTheRouteOrNotAtAll() {
         val r = north()
         assertEquals("Canal Road", NavMotion.street(r, 120.0))

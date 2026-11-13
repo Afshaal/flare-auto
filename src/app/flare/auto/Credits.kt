@@ -13,4 +13,15 @@ internal object Credits {
             "Map, routing and search data: © OpenStreetMap contributors, ODbL 1.0.\n" +
             "Weather data (optional): Open-Meteo.com, CC BY 4.0.\n" +
             "See the included attribution and license files."
+
+    /**
+     * The installed navigation pack's own data credits (the map has no attribution button): its name, the map data
+     * licence and, for a composite search index, every search source named in its build-info.json.
+     */
+    fun pack(context: android.content.Context): String? {
+        // The pack maps and routing use (also when none was chosen yet); reads build-info.json only, no hashing.
+        val pack = (NavigationPack.status(context) as? NavigationPack.Status.Ready)?.pack ?: return null
+        return "${pack.region} offline pack: map and routing data © OpenStreetMap contributors, ODbL 1.0." +
+            (pack.searchCredit?.let { "\nSearch data: $it." } ?: "")
+    }
 }

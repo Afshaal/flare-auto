@@ -20,7 +20,7 @@ internal object OfflineSearch {
     /** One database row. [area] / [street] / [osm] are empty with a schema 1 database. */
     data class Hit(val name: String, val kind: String, val lat: Double, val lon: Double,
                    val area: String = "", val street: String = "", val osm: String = "",
-                   val confidence: Double = 0.0) {
+                   val confidence: Double = 0.0, val displayName: String = name) {
         val norm: String by lazy { normalize(name) }
     }
 
@@ -128,10 +128,11 @@ internal object OfflineSearch {
      */
     fun detail(hit: Hit): String {
         val parts = ArrayList<String>()
+        val displayNorm = normalize(hit.displayName)
         val kind = kindLabel(hit.kind)
         if (hit.kind != "place" && hit.kind != "coordinate" && hit.kind != "saved") parts.add(kind)
-        if (hit.street.isNotEmpty() && normalize(hit.street) != hit.norm && !hit.norm.endsWith(normalize(hit.street))) parts.add(hit.street)
-        if (hit.area.isNotEmpty() && normalize(hit.area) != hit.norm) parts.add(hit.area)
+        if (hit.street.isNotEmpty() && normalize(hit.street) != displayNorm && !displayNorm.endsWith(normalize(hit.street))) parts.add(hit.street)
+        if (hit.area.isNotEmpty() && normalize(hit.area) != displayNorm) parts.add(hit.area)
         return parts.joinToString(" · ")
     }
 
@@ -164,13 +165,14 @@ internal object OfflineSearch {
             }
             val terms = if (normalized) matchTerms(normalize(query).split(' ')) else matchTerms(query.split(Regex("\\s+")))
             if (terms.isBlank()) return@use emptyList()
-            val hasConfidence = d.rawQuery("PRAGMA table_info(places)", null).use { c ->
-                var found = false
-                while (c.moveToNext()) if (c.getString(1) == "confidence") found = true
-                found
+            val fields = d.rawQuery("PRAGMA table_info(places)", null).use { c ->
+                val names = HashSet<String>()
+                while (c.moveToNext()) names.add(c.getString(1))
+                names
             }
-            val quality = if (hasConfidence) "p.confidence" else "0.0"
-            val columns = (if (normalized) "p.id,p.name,p.kind,p.lat,p.lon,p.area,p.street,p.osm" else "p.id,p.name,p.kind,p.lat,p.lon") + ",$quality"
+            val quality = if ("confidence" in fields) "p.confidence" else "0.0"
+            val display = if ("display_name" in fields) "COALESCE(NULLIF(p.display_name,''),p.name)" else "p.name"
+            val columns = (if (normalized) "p.id,p.name,p.kind,p.lat,p.lon,p.area,p.street,p.osm" else "p.id,p.name,p.kind,p.lat,p.lon") + ",$quality,$display"
             val join = if (normalized) "places_norm f ON p.id=f.rowid WHERE places_norm" else "places_fts f ON p.id=f.rowid WHERE places_fts"
             val rows = LinkedHashMap<Long, Hit>()
             fun read(sql: String, args: Array<String>) = d.rawQuery(sql, args).use { c ->
@@ -179,7 +181,8 @@ internal object OfflineSearch {
                     if (rows.containsKey(id)) continue
                     rows[id] = Hit(c.getString(1) ?: "", c.getString(2) ?: "place", c.getDouble(3), c.getDouble(4),
                         if (normalized) c.getString(5) ?: "" else "", if (normalized) c.getString(6) ?: "" else "",
-                        if (normalized) c.getString(7) ?: "" else "", c.getDouble(if (normalized) 8 else 5))
+                        if (normalized) c.getString(7) ?: "" else "", c.getDouble(if (normalized) 8 else 5),
+                        c.getString(if (normalized) 9 else 6) ?: c.getString(1) ?: "")
                 }
             }
             if (refLat != null && refLon != null) {

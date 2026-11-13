@@ -174,7 +174,7 @@ internal object OfflineDestinationPicker {
             list.removeAllViews()
             for (r in found) {
                 val hit = r.hit
-                val place = Place(hit.name, hit.kind, hit.lat, hit.lon, OfflineSearch.detail(hit))
+                val place = Place(hit.displayName, hit.kind, hit.lat, hit.lon, OfflineSearch.detail(hit))
                 row(MapIcon("pin", t.textSecondary), place.name, place.detail, OfflineSearch.distanceLabel(r.metres), place, { pick(place) }) { slotMenu(place) }
             }
         }

@@ -279,7 +279,7 @@ class SettingsActivity : Activity() {
         row(group, "Open-source credits", { "Dashline · Maps · Routing" }) {
             ThemedDialogs.Builder(this)
                 .setTitle("Open-source credits")
-                .setMessage(Credits.SUMMARY)
+                .setMessage(Credits.SUMMARY + (Credits.pack(this)?.let { "\n\n$it" } ?: ""))
                 .setPositiveButton("Close", null)
                 .show()
         }

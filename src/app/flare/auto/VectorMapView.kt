@@ -162,6 +162,8 @@ internal class VectorMapView(
         drawRoute()
         drawAlternatives()
         drawVehicle()
+        // Following was requested before the map was ready (e.g. only the last known fix, no new ones yet).
+        if (tracking && !followZoomSet) camera(false)
     }
 
     fun showRoute(path: NavRoute?) { route = path; ahead = null; pendingAhead = null; drawRoute() }
@@ -257,7 +259,17 @@ internal class VectorMapView(
         val fromHeading = this.heading
         // Parked (same position and heading): nothing to animate, so the GPU stays idle between fixes.
         if (from != null && from.distanceTo(target) < 0.3 && heading == this.heading) { applyPendingAhead(); return }
-        val duration = if (from == null || !isShown) null else NavMotion.glide(gap, from.distanceTo(target))
+        val glideMs = if (from == null || !isShown) null else NavMotion.glide(gap, from.distanceTo(target))
+        // Frames only as often as the picture visibly changes: wide views get one step per fix (see glideFrameMs).
+        val frameMs = if (glideMs == null || from == null) null else {
+            val pixels = map?.projection?.let { p ->
+                val a = p.toScreenLocation(from); val b = p.toScreenLocation(target)
+                Math.hypot((a.x - b.x).toDouble(), (a.y - b.y).toDouble())
+            } ?: Double.POSITIVE_INFINITY
+            val turn = if (heading == null || this.heading == null) 0.0 else HeadingFilter.shortest(heading - this.heading!!)
+            NavMotion.glideFrameMs(glideMs, pixels, turn)
+        }
+        val duration = if (frameMs == null) null else glideMs
         if (duration == null || from == null) { position = target; this.heading = heading; drawVehicle(); applyPendingAhead(); if (tracking) camera(false); return }
         val origin: LatLng = from
         glide = ValueAnimator.ofFloat(0f, 1f).apply {
@@ -267,7 +279,7 @@ internal class VectorMapView(
                 if (destroyed) { a.cancel(); return@addUpdateListener }
                 val f = a.animatedValue as Float
                 val frame = SystemClock.elapsedRealtime()
-                if (f < 1f && frame - lastFrameAt < FRAME_MS) return@addUpdateListener // ~30 fps is enough and spares the GPU
+                if (f < 1f && frame - lastFrameAt < frameMs!!) return@addUpdateListener // only visible steps (glideFrameMs)
                 lastFrameAt = frame
                 position = LatLng(origin.latitude + (target.latitude - origin.latitude) * f, origin.longitude + (target.longitude - origin.longitude) * f)
                 this@VectorMapView.heading = if (heading == null || fromHeading == null) heading else NavMotion.turn(fromHeading, heading, f)
@@ -281,7 +293,12 @@ internal class VectorMapView(
 
     /** Street under the marker, or null to hide the label. */
     fun setStreet(name: String?) {
-        street.text = name.orEmpty()
+        if (street.text.toString() != name.orEmpty()) {
+            street.text = name.orEmpty()
+            // Measured once per new name, not on every camera move (placeStreet runs each glide frame).
+            fun spec(size: Int) = if (size > 0) MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST) else MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
+            street.measure(spec(width), spec(height))
+        }
         street.visibility = if (name.isNullOrBlank()) GONE else VISIBLE
         placeStreet()
     }
@@ -291,7 +308,6 @@ internal class VectorMapView(
         val m = map ?: return
         val at = position ?: return
         val point = m.projection.toScreenLocation(at)
-        street.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST))
         street.translationX = (point.x - street.measuredWidth / 2f).coerceIn(0f, maxOf(0f, (width - street.measuredWidth).toFloat()))
         street.translationY = (point.y + MARKER_DP * density * 0.75f).coerceIn(0f, maxOf(0f, (height - street.measuredHeight).toFloat()))
     }
@@ -313,10 +329,14 @@ internal class VectorMapView(
     var followZoom = FOLLOW_ZOOM
 
     fun follow(headingUp: Boolean, animate: Boolean) {
+        // followZoomSet: the camera has been placed since the map opened (fixes can arrive before the style loads).
+        val started = !tracking || trackingHeadingUp != headingUp || !followZoomSet
         tracking = true
         trackingHeadingUp = headingUp
-        // While the marker glides, every frame moves the camera with it.
-        if (glide?.isRunning == true) return
+        // While following, [setVehicle] already moves the camera with each fix (glide frames or one step). Easing
+        // towards the same place again on every fix kept the map redrawing almost continuously, even when parked,
+        // which is what made the tilted 3D view lag; only starting to follow or switching orientation moves it here.
+        if (!started || glide?.isRunning == true) return
         camera(animate)
     }
 
@@ -399,8 +419,6 @@ internal class VectorMapView(
         private const val ROUTE = "flare-route-source"
         private const val ALTERNATIVES = "flare-alternatives-source"
         private const val ALTERNATIVE_COLOR = 0xff7d8794.toInt()
-        /** Minimum time between glide frames (about 30 fps). */
-        private const val FRAME_MS = 32L
         private const val VEHICLE = "flare-vehicle-source"
         private const val ARROW = "flare-vehicle-arrow"
         private const val DOT = "flare-vehicle-dot"

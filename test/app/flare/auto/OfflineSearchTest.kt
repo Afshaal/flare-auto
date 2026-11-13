@@ -125,6 +125,17 @@ class OfflineSearchTest {
     }
 
     @Test
+    fun latinDisplayKeepsOriginalAliasRanking() {
+        val urdu = OfflineSearch.Hit("لبرٹی مارکیٹ", "marketplace", 31.5102, 74.3441,
+            area = "Liberty Market", osm = "n1", displayName = "Liberty Market")
+        val result = OfflineSearch.rank(listOf(urdu), "لبرٹی مارکیٹ", null, null).single()
+        assertEquals(0, result.score)
+        assertEquals("Liberty Market", result.hit.displayName)
+        assertEquals("Marketplace", OfflineSearch.detail(result.hit))
+        assertEquals("Gulberg", OfflineSearch.Hit("Gulberg", "suburb", 31.5, 74.3).displayName)
+    }
+
+    @Test
     fun savedPlacesStarRecentsHomeWork() {
         val prefs = TestPrefs()
         val saved = SavedPlaces(prefs)
