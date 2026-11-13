@@ -12,8 +12,9 @@ import java.util.Locale
  * * schema 2 (revision 4+): adds `area`, `street`, `norm` (punctuation-free name, see [normalize]) and `osm`
  *   (source feature) columns and FTS4 `places_norm(norm)`, so "gor" finds "G.O.R." and results get a place hint.
  *
- * Results are ranked by text match first and then by distance from the reference point (GPS fix or map centre),
- * with true duplicates grouped (see [group]). The pure parts are unit tested (OfflineSearchTest).
+ * Results are ranked by text match first, then by place type ([tier]: cities, towns, suburbs and areas before
+ * shops and streets, generic rows last), then by distance from the reference point (GPS fix or map centre), with
+ * true duplicates grouped (see [group]). The pure parts are unit tested (OfflineSearchTest).
  */
 internal object OfflineSearch {
     /** One database row. [area] / [street] / [osm] are empty with a schema 1 database. */
@@ -74,8 +75,22 @@ internal object OfflineSearch {
         val ranked = hits.map { hit ->
             val metres = if (refLat != null && refLon != null) NavGeometry.distance(refLat, refLon, hit.lat, hit.lon) else Double.NaN
             Ranked(hit, score(hit.norm, q), metres)
-        }.sortedWith(compareBy<Ranked>({ it.score }, { if (it.metres.isNaN()) 0.0 else it.metres }, { it.hit.name.length }))
+        }.sortedWith(compareBy<Ranked>({ it.score }, { tier(it.hit.kind) }, { if (it.metres.isNaN()) 0.0 else it.metres }, { it.hit.name.length }))
         return group(ranked).take(limit)
+    }
+
+    /**
+     * Place type order among equally good text matches, lower first: city, town, suburb-like areas, villages,
+     * other named places (shops, landmarks…), streets, then generic rows ("place", "yes": addresses, untyped areas).
+     */
+    fun tier(kind: String): Int = when (kind) {
+        "city" -> 0
+        "town" -> 1
+        "suburb", "borough", "quarter", "neighbourhood", "area", "residential" -> 2
+        "village", "hamlet", "locality", "isolated_dwelling" -> 3
+        "street" -> 5
+        in GENERIC -> 6
+        else -> 4
     }
 
     /**

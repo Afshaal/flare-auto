@@ -133,6 +133,8 @@ internal object Keys {
     const val OFFLINE_NAV_LON = "offline_nav_lon"
     const val OFFLINE_NAV_NAME = "offline_nav_name"
     const val OFFLINE_NAV_VOICE = "offline_nav_voice"
+    /** Point ("lat,lon") on the route option the driver chose, kept when rerouting; absent for the fastest route. */
+    const val OFFLINE_NAV_VIA = "offline_nav_via"
     /** Offline search (JSON, per driver profile): starred places, recent destinations, the Home and Work slots. */
     const val OFFLINE_PLACES_STARRED = "offline_places_starred"
     const val OFFLINE_PLACES_RECENT = "offline_places_recent"

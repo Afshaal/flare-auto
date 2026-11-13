@@ -42,11 +42,31 @@ class OfflineSearchTest {
         val exactFar = OfflineSearch.Hit("G.O.R.", "suburb", 31.56, 74.33)
         val near = OfflineSearch.Hit("GOR 5", "place", 31.5105, 74.3445)
         val ranked = OfflineSearch.rank(listOf(far, near, exactFar), "gor", liberty.first, liberty.second)
-        assertEquals(listOf("G.O.R.", "GOR 5", "Gor Gulab"), ranked.map { it.hit.name })
+        // Equal text quality ("GOR 5", "Gor Gulab"): the village before the generic row, although it is farther.
+        assertEquals(listOf("G.O.R.", "Gor Gulab", "GOR 5"), ranked.map { it.hit.name })
         // Same text quality: nearer first.
         val a = OfflineSearch.Hit("Bank Alfalah", "bank", 31.60, 74.40)
         val b = OfflineSearch.Hit("Bank Alfalah", "bank", 31.511, 74.345)
         assertEquals(listOf(b, a), OfflineSearch.rank(listOf(a, b), "bank alfalah", liberty.first, liberty.second).map { it.hit })
+    }
+
+    @Test
+    fun citiesThenTownsThenAreasBeforeFiller() {
+        // From Lahore, "karachi": the city 1,000 km away comes before nearer rows with the same name.
+        val lahore = 31.5204 to 74.3587
+        val city = OfflineSearch.Hit("Karachi", "city", 24.8547, 67.0207, osm = "n3181550515")
+        val boundaryPiece = OfflineSearch.Hit("Karachi", "place", 25.4158, 67.4023, osm = "w1209269286")
+        val shop = OfflineSearch.Hit("Karachi", "bakery", 31.52, 74.36, osm = "n5")
+        val village = OfflineSearch.Hit("Karachi", "village", 33.2027, 72.7941, osm = "n6")
+        val street = OfflineSearch.Hit("Karachi", "street", 31.53, 74.35, osm = "w7")
+        val prefix = OfflineSearch.Hit("Karachi Bakery", "bakery", 31.521, 74.359, osm = "n8")
+        val ranked = OfflineSearch.rank(listOf(boundaryPiece, shop, street, prefix, village, city), "karachi", lahore.first, lahore.second)
+        assertEquals(listOf("city", "village", "bakery", "street", "place", "bakery"), ranked.map { it.hit.kind })
+        assertEquals("Karachi Bakery", ranked.last().hit.name) // a weaker text match stays below every exact one
+        assertTrue(OfflineSearch.tier("town") < OfflineSearch.tier("suburb"))
+        assertTrue(OfflineSearch.tier("neighbourhood") < OfflineSearch.tier("restaurant"))
+        assertTrue(OfflineSearch.tier("restaurant") < OfflineSearch.tier("street"))
+        assertTrue(OfflineSearch.tier("street") < OfflineSearch.tier("place"))
     }
 
     @Test

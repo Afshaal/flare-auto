@@ -165,9 +165,12 @@ internal class VectorMapView(
         }
         // First follow after opening: settle at the close driving zoom unless the driver is already closer.
         if (!followZoomSet && current.zoom < followZoom - 0.4) builder.zoom(followZoom)
+        val settled = followZoomSet // false: first follow since the map opened, placed at once
         followZoomSet = true
         val update = CameraUpdateFactory.newCameraPosition(builder.build())
-        if (animate) m.easeCamera(update, FOLLOW_MS, false) else m.moveCamera(update)
+        // Glide between nearby fixes only; a far jump (first fix after opening, GPS reacquired) is instant.
+        val near = current.target?.let { it.distanceTo(at) < JUMP_M } ?: false
+        if (animate && near && settled) m.easeCamera(update, FOLLOW_MS, false) else m.moveCamera(update)
     }
 
     /** Flat north-up view around the current centre (leaving heading-up while not following). */
@@ -236,6 +239,8 @@ internal class VectorMapView(
         /** Vehicle marker diameter (44 dp in r2, 32 dp in r3). */
         const val MARKER_DP = 23
         private const val FOLLOW_MS = 950
+        /** Camera moves longer than this are not animated. */
+        private const val JUMP_M = 1500.0
 
         /** MapLibre needs OpenGL ES 3.0. */
         fun supported(context: Context): Boolean {

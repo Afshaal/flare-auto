@@ -93,7 +93,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         if(!pack.covers(place.lat,place.lon)) { turnCard.message("Outside ${pack.region} driving coverage");return }
         fun begin(lat:Double,lon:Double,asPreview:Boolean) {
             target=place;route=null;map.showRoute(null);tripCard.hide();tripCard.starred(saved.isStarred(place))
-            p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();calculate(lat,lon,asPreview);onActiveChanged?.invoke(true)
+            p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply();calculate(lat,lon,asPreview,true);onActiveChanged?.invoke(true)
         }
         val fix=location
         if(fix!=null && recent(fix)) begin(fix.latitude,fix.longitude,false)
@@ -101,21 +101,55 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             .setPositiveButton("Preview route") { _,_->val start=map.center();begin(start.first,start.second,true) }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun calculate(lat:Double,lon:Double,asPreview:Boolean) {
+    /**
+     * [options]: a new destination; long trips then offer the fastest route and its alternatives to choose from.
+     * Otherwise (reroute, restore) the route goes through the saved point of the chosen option, if any.
+     */
+    private fun calculate(lat:Double,lon:Double,asPreview:Boolean,options:Boolean=false) {
         val dest=target ?: return
-        calculating=true;preview=asPreview;turnCard.message("Calculating route to ${dest.name}…")
-        engine.route(lat,lon,dest.lat,dest.lon,pack) { result->
-            if(closed) return@route
-            calculating=false
-            result.fold({ path->
-                route=path;segment=0;spoken=-1;offRoute=0;map.showRoute(path)
-                if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(pack,dest.lat,dest.lon) }
-                p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,!asPreview).putString(Keys.OFFLINE_NAV_LAT,dest.lat.toString()).putString(Keys.OFFLINE_NAV_LON,dest.lon.toString()).putString(Keys.OFFLINE_NAV_NAME,dest.name).apply()
-                turnCard.message(if(asPreview) "Route preview · ${dest.name}" else "Continue towards ${dest.name}")
-                tripCard.show(path.distance,path.millis,p.clock24)
-                if(!asPreview) { initVoice();location?.let { update(it) } }
-            },{ error->turnCard.message("Route unavailable · "+(error.message ?: "no local driving route found"));tripCard.hide() })
+        calculating=true;preview=asPreview
+        val failed={ error:Throwable->
+            calculating=false;turnCard.message("Route unavailable · "+(error.message ?: "no local driving route found"));tripCard.hide()
         }
+        if(options) {
+            turnCard.message("Finding routes to ${dest.name}…")
+            engine.routes(lat,lon,dest.lat,dest.lon,pack) { result->
+                if(closed || target!==dest) return@routes
+                result.fold({ found-> if(found.size<2) apply(found.first(),dest,asPreview) else offer(found,dest,asPreview) },failed)
+            }
+            return
+        }
+        turnCard.message("Calculating route to ${dest.name}…")
+        engine.route(lat,lon,dest.lat,dest.lon,pack,RouteOptions.decode(p.getString(Keys.OFFLINE_NAV_VIA,null))) { result->
+            if(closed) return@route
+            result.fold({ apply(it,dest,asPreview) },failed)
+        }
+    }
+
+    /** Lets the driver pick one of [found] (fastest first); the fastest is shown meanwhile and used if dismissed. */
+    private fun offer(found:List<NavRoute>,dest:OfflineDestinationPicker.Place,asPreview:Boolean) {
+        map.showRoute(found.first());turnCard.message("Choose a route to ${dest.name}")
+        var picked=false
+        fun pick(i:Int) {
+            if(picked || closed || target!==dest) return
+            picked=true
+            val via=if(i==0) null else found[i].via ?: RouteOptions.viaPoint(found[i].points,found[0].points)
+            p.edit().apply { if(via==null) remove(Keys.OFFLINE_NAV_VIA) else putString(Keys.OFFLINE_NAV_VIA,RouteOptions.encode(via)) }.apply()
+            apply(found[i],dest,asPreview)
+        }
+        ThemedDialogs.Builder(a).setTitle("Routes to ${dest.name}")
+            .setItems(RouteOptions.summaries(found).toTypedArray()) { _,i->pick(i) }
+            .setOnDismissListener { main.post { pick(0) } }.show() // after any item click: back or outside = fastest
+    }
+
+    private fun apply(path:NavRoute,dest:OfflineDestinationPicker.Place,asPreview:Boolean) {
+        calculating=false
+        route=path;segment=0;spoken=-1;offRoute=0;map.showRoute(path)
+        if(asPreview) { cachedRoute=null;cachedKey=null } else { cachedRoute=path;cachedKey=key(pack,dest.lat,dest.lon) }
+        p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,!asPreview).putString(Keys.OFFLINE_NAV_LAT,dest.lat.toString()).putString(Keys.OFFLINE_NAV_LON,dest.lon.toString()).putString(Keys.OFFLINE_NAV_NAME,dest.name).apply()
+        turnCard.message(if(asPreview) "Route preview · ${dest.name}" else "Continue towards ${dest.name}")
+        tripCard.show(path.distance,path.millis,p.clock24)
+        if(!asPreview) { initVoice();location?.let { update(it) } }
     }
 
     private fun recent(fix:Location):Boolean {
@@ -132,6 +166,10 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             return
         }
         if(preview || calculating) return
+        // Past the chosen option's distinctive stretch: reroutes may take the fastest way from here on.
+        RouteOptions.decode(p.getString(Keys.OFFLINE_NAV_VIA,null))?.let { via->
+            if(NavGeometry.distance(fix.latitude,fix.longitude,via.first,via.second)<VIA_PASSED_M) p.edit().remove(Keys.OFFLINE_NAV_VIA).apply()
+        }
         val path=route ?: return
         val position=NavGeometry.nearest(path,fix.latitude,fix.longitude,segment);segment=position.segment
         val threshold=maxOf(50.0,if(fix.hasAccuracy()) fix.accuracy*2.0 else 50.0)
@@ -160,7 +198,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         val name=target?.name.orEmpty()
         speak("You have arrived near your destination")
         cachedRoute=null;cachedKey=null;route=null;target=null;preview=false
-        p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply()
+        p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply()
         map.showRoute(null);tripCard.hide();turnCard.message("You have arrived · $name")
         onActiveChanged?.invoke(false)
         main.postDelayed({ if(!closed && target==null) turnCard.hide() },10000)
@@ -187,7 +225,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
 
     fun stopRoute() {
         cachedRoute=null;cachedKey=null;engine.close();route=null;target=null;calculating=false;preview=false
-        p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).apply();map.showRoute(null)
+        p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply();map.showRoute(null)
         voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null
         turnCard.hide();tripCard.hide();onActiveChanged?.invoke(false)
     }
@@ -198,6 +236,8 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         /** Last active route of this process, so the Home widget and the full map share it without recomputing. */
         private var cachedRoute:NavRoute?=null
         private var cachedKey:String?=null
+        /** Within this distance of the chosen option's via point, it counts as passed. */
+        private const val VIA_PASSED_M=2000.0
         /** Includes the pack, so a route from one pack is never reused after switching to another. */
         private fun key(pack:NavigationPack.Pack,lat:Double,lon:Double)="${pack.dir.absolutePath}|${pack.id}|$lat,$lon"
         /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */

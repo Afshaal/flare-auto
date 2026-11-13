@@ -4,7 +4,12 @@ import kotlin.math.*
 
 /** One instruction: [text] (spoken), GraphHopper [sign] (turn arrow), distance [at] along the route, [road] name. */
 internal data class NavStep(val text:String,val sign:Int,val at:Double,val road:String="")
-internal data class NavRoute(val points:DoubleArray,val cumulative:DoubleArray,val steps:List<NavStep>,val distance:Double,val millis:Long)
+/**
+ * [roads]: (road name, metres) per instruction, for labelling route options ([RouteOptions]); [via]: the point a
+ * route option was routed through (null for the fastest route).
+ */
+internal data class NavRoute(val points:DoubleArray,val cumulative:DoubleArray,val steps:List<NavStep>,val distance:Double,val millis:Long,
+                             val roads:List<Pair<String,Double>> = emptyList(),val via:Pair<Double,Double>? = null)
 internal object NavGeometry {
     data class Position(val segment:Int,val along:Double,val away:Double)
     fun distance(a:Double,b:Double,c:Double,d:Double):Double {

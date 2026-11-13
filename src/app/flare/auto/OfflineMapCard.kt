@@ -135,9 +135,20 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         } catch(e:Exception) { main.post { if(started && generation==token) label.text="Map unavailable\n${e.message.orEmpty()}" } }
     }
     private fun savedCenter(fallbackLat:Double,fallbackLon:Double):Pair<Double,Double> {
+        // Following GPS: open where the car last was, so the map does not sweep across the region to the first fix.
+        if(preview || p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true)) lastKnown()?.let { return it.latitude to it.longitude }
         val lat=p.getString(Keys.OFFLINE_MAP_LAT,"")?.toDoubleOrNull()?.takeIf { it.isFinite() && it in -85.0..85.0 } ?: fallbackLat
         val lon=p.getString(Keys.OFFLINE_MAP_LON,"")?.toDoubleOrNull()?.takeIf { it.isFinite() && it in -180.0..180.0 } ?: fallbackLon
         return lat to lon
+    }
+    /** Last GPS (else passive) position Android knows, without waiting for a fix; null without permission. */
+    private fun lastKnown():Location? {
+        if(context.checkSelfPermission(android.Manifest.permission.ACCESS_FINE_LOCATION)!=android.content.pm.PackageManager.PERMISSION_GRANTED) return null
+        val manager=context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+        return try {
+            listOf(LocationManager.GPS_PROVIDER,LocationManager.PASSIVE_PROVIDER).mapNotNull { manager.getLastKnownLocation(it) }
+                .filter { it.latitude.isFinite() && it.longitude.isFinite() }.maxByOrNull { it.time }
+        } catch(_:RuntimeException) { null }
     }
     private fun openVector(pack:NavigationPack.Pack,token:Int) {
         val box=pack.bbox

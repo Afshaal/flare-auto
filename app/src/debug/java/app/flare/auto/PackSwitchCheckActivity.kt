@@ -61,6 +61,20 @@ class PackSwitchCheckActivity : Activity() {
                     val text = result.fold({ "%.1f km, %d steps".format(it.distance / 1000, it.steps.size) }, { "error: ${it.message}" })
                     check(result.isSuccess == inside, "${dir.name}: $name ${if (inside) "routes" else "is refused (outside coverage)"} — $text, $ms ms")
                 }
+                if (pack.covers(33.6844, 73.0479) && pack.covers(24.8547, 67.0207)) for ((name, trip) in OPTION_TRIPS) {
+                    val (options, ms) = routes(trip, pack)
+                    val list = options.getOrNull().orEmpty()
+                    val lines = RouteOptions.summaries(list)
+                    check(list.isNotEmpty(), "${dir.name}: $name route options (${ms} ms): ${lines.joinToString(" | ").ifEmpty { options.exceptionOrNull()?.message.orEmpty() }}")
+                    if (list.size > 1) {
+                        val via = list[1].via ?: RouteOptions.viaPoint(list[1].points, list[0].points)
+                        val (kept, viaMs) = route(trip, pack, via)
+                        val shared = kept.getOrNull()?.let { RouteOptions.refs(it.roads).firstOrNull() }
+                        check(via != null && kept.isSuccess && shared == RouteOptions.refs(list[1].roads).firstOrNull(),
+                            "${dir.name}: $name reroute through the 2nd option keeps ${RouteOptions.labels(list.map { it.roads })[1]} " +
+                                "(${kept.getOrNull()?.let { "%.0f km".format(it.distance / 1000) }}, ${viaMs} ms)")
+                    }
+                }
                 previous?.let { old ->
                     val (stale, _) = route(TRIPS[0].second, old)
                     check(stale.isFailure && stale.exceptionOrNull()?.message.orEmpty().contains("changed"),
@@ -75,11 +89,20 @@ class PackSwitchCheckActivity : Activity() {
         }
     }
 
-    private fun route(trip: DoubleArray, pack: NavigationPack.Pack): Pair<Result<NavRoute>, Long> {
+    private fun routes(trip: DoubleArray, pack: NavigationPack.Pack): Pair<Result<List<NavRoute>>, Long> {
+        val latch = CountDownLatch(1)
+        var outcome: Result<List<NavRoute>> = Result.failure(IllegalStateException("timeout"))
+        val t0 = SystemClock.elapsedRealtime()
+        runOnUiThread { routing.routes(trip[0], trip[1], trip[2], trip[3], pack) { outcome = it; latch.countDown() } }
+        latch.await(120, TimeUnit.SECONDS)
+        return outcome to SystemClock.elapsedRealtime() - t0
+    }
+
+    private fun route(trip: DoubleArray, pack: NavigationPack.Pack, via: Pair<Double, Double>? = null): Pair<Result<NavRoute>, Long> {
         val latch = CountDownLatch(1)
         var outcome: Result<NavRoute> = Result.failure(IllegalStateException("timeout"))
         val t0 = SystemClock.elapsedRealtime()
-        runOnUiThread { routing.route(trip[0], trip[1], trip[2], trip[3], pack) { outcome = it; latch.countDown() } }
+        runOnUiThread { routing.route(trip[0], trip[1], trip[2], trip[3], pack, via) { outcome = it; latch.countDown() } }
         latch.await(120, TimeUnit.SECONDS)
         return outcome to SystemClock.elapsedRealtime() - t0
     }
@@ -110,5 +133,13 @@ class PackSwitchCheckActivity : Activity() {
             "Liberty → Badshahi Mosque" to doubleArrayOf(31.5106, 74.3446, 31.5880, 74.3107),
             "Lahore → Islamabad" to doubleArrayOf(31.5204, 74.3587, 33.6844, 73.0479),
             "Karachi Clifton → Saddar" to doubleArrayOf(24.8145, 67.0305, 24.8560, 67.0120))
+        /** Major-city trips for route options (Pakistan pack). */
+        val OPTION_TRIPS = listOf(
+            "Lahore → Islamabad" to doubleArrayOf(31.5204, 74.3587, 33.6844, 73.0479),
+            "Lahore → Rawalpindi" to doubleArrayOf(31.5204, 74.3587, 33.5651, 73.0169),
+            "Lahore → Multan" to doubleArrayOf(31.5204, 74.3587, 30.1575, 71.5249),
+            "Lahore → Karachi" to doubleArrayOf(31.5204, 74.3587, 24.8547, 67.0207),
+            "Islamabad → Karachi" to doubleArrayOf(33.6844, 73.0479, 24.8547, 67.0207),
+            "Islamabad → Lahore" to doubleArrayOf(33.7104, 73.0563, 31.5102, 74.3441))
     }
 }
