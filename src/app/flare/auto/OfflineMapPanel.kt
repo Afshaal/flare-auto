@@ -49,8 +49,19 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,group
                 p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
         }
         // Mapsforge · 2D only: map files outside the navigation pack.
+        val buildings=row("3D buildings",{
+            if ((pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings == null) "Data not installed"
+            else if(p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false)) "On" else "Off"
+        }) {
+            if ((pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings == null) {
+                Toast.makeText(a,"Install a map pack with building heights",Toast.LENGTH_SHORT).show()
+            } else {
+                p.edit().putBoolean(Keys.OFFLINE_MAP_BUILDINGS,!p.getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false)).apply()
+                OfflineMapStore.touch(a);refresh()
+            }
+        }
         val otherRegions=row("Other regions",{ regionValue() }) { regions() }
-        refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(otherRegions,!vector) }
+        refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(buildings,vector);visible(otherRegions,!vector) }
         // Shared by both renderers.
         toggle("Follow GPS position",Keys.OFFLINE_MAP_FOLLOW)
         row("Map center",{ if(p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrEmpty()) "Automatic" else "Custom" }) {

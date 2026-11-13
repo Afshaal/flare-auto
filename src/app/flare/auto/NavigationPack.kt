@@ -42,14 +42,17 @@ internal object NavigationPack {
         val search: File,
         val checksumsSha256: String,
         /** Display map for the MapLibre renderer (pack revision 3+); null in older packs. */
-        val vector: VectorMap? = null
+        val vector: VectorMap? = null,
+        /** Attribution for a search index merged from several sources (`search_sources.attribution`); null: OSM only. */
+        val searchCredit: String? = null
     ) {
         fun covers(lat: Double, lon: Double) =
             lat.isFinite() && lon.isFinite() && lat in bbox[0]..bbox[2] && lon in bbox[1]..bbox[3]
     }
 
     /** Vector tiles (MBTiles), MapLibre style with a `{pack}` placeholder, and the local glyph folder. */
-    class VectorMap(val tiles: File, val style: File, val glyphs: File, val maxZoom: Int)
+    class VectorMap(val tiles: File, val style: File, val glyphs: File, val maxZoom: Int,
+                    val buildings: File? = null)
 
     sealed class Status {
         object Missing : Status()
@@ -127,12 +130,14 @@ internal object NavigationPack {
             // Optional: a pack whose vector files are missing still routes and shows the Mapsforge map.
             val vector = files.optJSONObject("vector")?.let { v ->
                 VectorMap(File(dir, v.getString("tiles")), File(dir, v.getString("style")), File(dir, v.getString("glyphs")),
-                    v.optInt("maxzoom", 15))
+                    v.optInt("maxzoom", 15), v.optString("buildings", "").takeIf { it.isNotBlank() }
+                        ?.let { File(dir, it) }?.takeIf { it.isFile })
             }?.takeIf { it.tiles.isFile && it.style.isFile && it.glyphs.isDirectory }
             val pack = Pack(dir, info.getString("pack_id"), info.optString("region", dir.name),
                 doubleArrayOf(box.getDouble("min_lat"), box.getDouble("min_lon"), box.getDouble("max_lat"), box.getDouble("max_lon")),
                 File(dir, files.getString("graph_dir")), File(dir, files.getString("map")), File(dir, files.getString("search")),
-                info.getString("checksums_sha256"), vector)
+                info.getString("checksums_sha256"), vector,
+                info.optJSONObject("search_sources")?.optString("attribution", "")?.takeIf { it.isNotBlank() })
             when {
                 !File(pack.graph, "properties").isFile -> Status.Invalid("routing graph missing")
                 !pack.map.isFile -> Status.Invalid("map file missing")

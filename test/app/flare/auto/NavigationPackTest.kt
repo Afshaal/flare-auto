@@ -44,6 +44,35 @@ class NavigationPackTest {
     }
 
     @Test
+    fun optionalBuildingOverlayDoesNotBreakOldPacks() {
+        val dir = pack()
+        val folder = File(dir, "vector").apply { mkdirs() }
+        File(folder, "map.mbtiles").writeText("test")
+        File(folder, "style.json").writeText("{}")
+        File(folder, "glyphs").mkdirs()
+        val infoFile = File(dir,"build-info.json")
+        val info = org.json.JSONObject(infoFile.readText())
+        info.getJSONObject("files").put("vector",org.json.JSONObject("""{"tiles":"vector/map.mbtiles",
+            "style":"vector/style.json","glyphs":"vector/glyphs","buildings":"vector/buildings.mbtiles"}"""))
+        infoFile.writeText(info.toString())
+        assertNull((NavigationPack.read(dir) as NavigationPack.Status.Ready).pack.vector!!.buildings)
+        File(folder,"buildings.mbtiles").writeText("test")
+        assertTrue((NavigationPack.read(dir) as NavigationPack.Status.Ready).pack.vector!!.buildings!!.isFile)
+    }
+
+    @Test
+    fun compositeSearchAttributionComesFromTheManifest() {
+        val dir = pack()
+        assertNull((NavigationPack.read(dir) as NavigationPack.Status.Ready).pack.searchCredit)
+        val infoFile = File(dir, "build-info.json")
+        val info = org.json.JSONObject(infoFile.readText())
+        info.put("search_sources", org.json.JSONObject().put("attribution", "OpenStreetMap contributors; Overture Maps contributors"))
+        infoFile.writeText(info.toString())
+        assertEquals("OpenStreetMap contributors; Overture Maps contributors",
+            (NavigationPack.read(dir) as NavigationPack.Status.Ready).pack.searchCredit)
+    }
+
+    @Test
     fun unsupportedFormatIsRejected() {
         val status = NavigationPack.read(pack(format = 2))
         assertTrue(status is NavigationPack.Status.Invalid)

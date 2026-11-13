@@ -7,6 +7,22 @@ import org.junit.Test
 
 /** Offline search: name normalization, matching, ranking, duplicate grouping and result labels. */
 class OfflineSearchTest {
+    @Test
+    fun confidenceTiesAreIndependentOfInsertionOrder() {
+        val low = OfflineSearch.Hit("Test Bank", "bank", 31.5, 74.3, osm = "ovt:low", confidence = 0.51)
+        val high = low.copy(osm = "ovt:high", confidence = 0.95)
+        for (hits in listOf(listOf(low, high), listOf(high, low))) {
+            assertEquals(high, OfflineSearch.rank(hits, "test bank", null, null).first().hit)
+        }
+    }
+
+    @Test
+    fun nearbyOvertureBranchesAreKeptDistinct() {
+        val a = OfflineSearch.Hit("Test Bank", "bank", 31.5, 74.3, osm = "ovt:a")
+        val b = a.copy(lat = 31.501, osm = "ovt:b")
+        assertEquals(2, OfflineSearch.rank(listOf(a, b), "test bank", 31.5, 74.3).size)
+    }
+
     private val liberty = 31.5102 to 74.3441
 
     @Test

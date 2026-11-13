@@ -19,7 +19,8 @@ import java.util.Locale
 internal object OfflineSearch {
     /** One database row. [area] / [street] / [osm] are empty with a schema 1 database. */
     data class Hit(val name: String, val kind: String, val lat: Double, val lon: Double,
-                   val area: String = "", val street: String = "", val osm: String = "") {
+                   val area: String = "", val street: String = "", val osm: String = "",
+                   val confidence: Double = 0.0) {
         val norm: String by lazy { normalize(name) }
     }
 
@@ -75,7 +76,7 @@ internal object OfflineSearch {
         val ranked = hits.map { hit ->
             val metres = if (refLat != null && refLon != null) NavGeometry.distance(refLat, refLon, hit.lat, hit.lon) else Double.NaN
             Ranked(hit, score(hit.norm, q), metres)
-        }.sortedWith(compareBy<Ranked>({ it.score }, { tier(it.hit.kind) }, { if (it.metres.isNaN()) 0.0 else it.metres }, { it.hit.name.length }))
+        }.sortedWith(compareBy<Ranked>({ it.score }, { tier(it.hit.kind) }, { if (it.metres.isNaN()) 0.0 else it.metres }, { -it.hit.confidence }, { it.hit.name.length }, { it.hit.osm }, { it.hit.name }))
         return group(ranked).take(limit)
     }
 
@@ -109,7 +110,8 @@ internal object OfflineSearch {
                 val other = k.hit
                 other.norm == hit.norm && (other.kind == hit.kind || other.kind in GENERIC || hit.kind in GENERIC) &&
                     NavGeometry.distance(other.lat, other.lon, hit.lat, hit.lon) <
-                    (if (other.kind == "street" && hit.kind == "street") STREET_GROUP_M else PLACE_GROUP_M)
+                    (if (other.kind == "street" && hit.kind == "street") STREET_GROUP_M
+                     else if (other.osm.startsWith("ovt:") || hit.osm.startsWith("ovt:")) 40.0 else PLACE_GROUP_M)
             }
             if (index < 0) kept.add(r)
             else if (kept[index].hit.kind in GENERIC && hit.kind !in GENERIC) kept[index] = r.copy(score = kept[index].score, metres = kept[index].metres)
@@ -162,7 +164,13 @@ internal object OfflineSearch {
             }
             val terms = if (normalized) matchTerms(normalize(query).split(' ')) else matchTerms(query.split(Regex("\\s+")))
             if (terms.isBlank()) return@use emptyList()
-            val columns = if (normalized) "p.id,p.name,p.kind,p.lat,p.lon,p.area,p.street,p.osm" else "p.id,p.name,p.kind,p.lat,p.lon"
+            val hasConfidence = d.rawQuery("PRAGMA table_info(places)", null).use { c ->
+                var found = false
+                while (c.moveToNext()) if (c.getString(1) == "confidence") found = true
+                found
+            }
+            val quality = if (hasConfidence) "p.confidence" else "0.0"
+            val columns = (if (normalized) "p.id,p.name,p.kind,p.lat,p.lon,p.area,p.street,p.osm" else "p.id,p.name,p.kind,p.lat,p.lon") + ",$quality"
             val join = if (normalized) "places_norm f ON p.id=f.rowid WHERE places_norm" else "places_fts f ON p.id=f.rowid WHERE places_fts"
             val rows = LinkedHashMap<Long, Hit>()
             fun read(sql: String, args: Array<String>) = d.rawQuery(sql, args).use { c ->
@@ -171,17 +179,17 @@ internal object OfflineSearch {
                     if (rows.containsKey(id)) continue
                     rows[id] = Hit(c.getString(1) ?: "", c.getString(2) ?: "place", c.getDouble(3), c.getDouble(4),
                         if (normalized) c.getString(5) ?: "" else "", if (normalized) c.getString(6) ?: "" else "",
-                        if (normalized) c.getString(7) ?: "" else "")
+                        if (normalized) c.getString(7) ?: "" else "", c.getDouble(if (normalized) 8 else 5))
                 }
             }
             if (refLat != null && refLon != null) {
                 val kx = Math.cos(Math.toRadians(refLat))
                 read("SELECT $columns FROM places p JOIN $join MATCH ? ORDER BY " +
-                    "(p.lat-?)*(p.lat-?)+(p.lon-?)*(p.lon-?)*${kx * kx} LIMIT $CANDIDATES",
+                    "(p.lat-?)*(p.lat-?)+(p.lon-?)*(p.lon-?)*${kx * kx}, $quality DESC, p.id LIMIT $CANDIDATES",
                     arrayOf(terms, refLat.toString(), refLat.toString(), refLon.toString(), refLon.toString()))
             }
             // Short names that match the query best anywhere (e.g. a suburb far from the car), by name length.
-            read("SELECT $columns FROM places p JOIN $join MATCH ? ORDER BY length(p.name) LIMIT $CANDIDATES", arrayOf(terms))
+            read("SELECT $columns FROM places p JOIN $join MATCH ? ORDER BY length(p.name), $quality DESC, p.id LIMIT $CANDIDATES", arrayOf(terms))
             rank(rows.values.toList(), query, refLat, refLon)
         }
     }

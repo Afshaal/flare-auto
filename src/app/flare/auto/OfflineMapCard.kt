@@ -278,7 +278,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     private fun attribution() {
         ThemedDialogs.Builder(a).setTitle("Map attribution").setMessage("© OpenStreetMap contributors · ODbL 1.0\nhttps://www.openstreetmap.org/copyright\n" +
             (if(vectorMap!=null) "Rendered offline with MapLibre Native (BSD-2-Clause). Labels: Noto Sans, SIL OFL 1.1." else "Rendered offline using Mapsforge.") +
-            " Routing: GraphHopper (Apache-2.0). License notices are included with this app.").setPositiveButton("Close",null).show()
+            " Routing: GraphHopper (Apache-2.0). License notices are included with this app." +
+            (navPack?.searchCredit?.let { "\nSearch data: $it." } ?: "")).setPositiveButton("Close",null).show()
     }
     /**
      * Home preview overlay while navigating: the compact turn indicator (arrow and distance) top-left and the trip
@@ -418,7 +419,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         val direction=heading.update(fix.latitude,fix.longitude,if(fix.hasBearing()) fix.bearing else null,
             if(fix.hasSpeed()) fix.speed else null,if(fix.hasAccuracy()) fix.accuracy else null)
         v.setVehicle(snapped?.lat ?: fix.latitude,snapped?.lon ?: fix.longitude,if(snapped!=null && direction!=null) snapped.bearing else direction)
-        v.setStreet(street)
+        v.setStreet(if(preview) null else street) // Home widget: no room under the marker (the trip bar is there)
         if(follow && overviewRoutes==null) v.follow(headingUp(),!first)
     }
     @Deprecated("Deprecated in Java") override fun onStatusChanged(provider:String?,status:Int,extras:Bundle?)=Unit

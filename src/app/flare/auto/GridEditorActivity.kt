@@ -72,6 +72,17 @@ class GridEditorActivity:Activity() {
     }
     /** Puts the widget being placed on the page (replacing the tile it was chosen for, if any). */
     private fun place(candidate:GridTile) { if(replacement>=0) pages[page][replacement]=candidate else pages[page].add(candidate);placing=null;selected=-1 }
+    /**
+     * A widget chosen in the gallery goes straight onto the page at [tile]'s position (replacing tile [replace], or
+     * added) and is selected like a tapped widget: outline and four resize handles, normal appearance, movable.
+     */
+    private fun addChosen(tile:GridTile,replace:Int) {
+        edit {
+            val tiles=pages[page]
+            if(replace in tiles.indices) { tiles[replace]=tile;selected=replace } else { tiles.add(tile);selected=tiles.lastIndex }
+            placing=null;replacement=-1;dockSelected=-1
+        }
+    }
     private fun save() {
         // Saving while a new widget is still being placed keeps it where it is shown (it was dropped before).
         placing?.let { if(page in pages.indices) place(it) }
@@ -256,9 +267,9 @@ class GridEditorActivity:Activity() {
                         val old=pages[page].getOrNull(index)
                         val atOld=old?.copy(type=style.type,w=w,h=h)?.takeIf { it.valid() && others.none { t->t.overlaps(it) || t.type==it.type } }
                         val fit=atOld ?: WidgetCatalog.fit(others,style.type,w,h)
-                        if(fit!=null) { replacement=index;placing=fit;dialog.dismiss();render() }
+                        if(fit!=null) { dialog.dismiss();addChosen(fit,index) }
                         else ThemedDialogs.Builder(this@GridEditorActivity).setTitle("No space for this size").setMessage("Choose a smaller size, resize another widget, or add a new page.")
-                            .setPositiveButton("New page") { _,_->if(pages.size<5) { edit { pages.add(mutableListOf());page=pages.lastIndex;replacement=-1;placing=GridTile(style.type,0,0,w,h) };dialog.dismiss() } }
+                            .setPositiveButton("New page") { _,_->if(pages.size<5) { pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,w,h),-1);dialog.dismiss() } }
                             .setNegativeButton("Back",null).show()
                     }
                 };sizes.addView(button,LinearLayout.LayoutParams(0,WRAP,1f))
@@ -267,7 +278,7 @@ class GridEditorActivity:Activity() {
             command(addPageRow,"Add on a new page") {
                 if(pages.size<5) {
                     val size=style.sizes.first()
-                    edit { pages.add(mutableListOf());page=pages.lastIndex;replacement=-1;placing=GridTile(style.type,0,0,size.first,size.second) }
+                    pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile(style.type,0,0,size.first,size.second),-1)
                     dialog.dismiss()
                 } else Toast.makeText(this,"Five pages maximum",Toast.LENGTH_SHORT).show()
             }
@@ -313,8 +324,8 @@ class GridEditorActivity:Activity() {
             if(page !in pages.indices) page=pages.lastIndex
             val others=pages[page].filterIndexed { n,_->n!=widgetReplacement }
             val fit=WidgetCatalog.fit(others,"widget:"+id,4,3)
-            if(fit!=null) { replacement=widgetReplacement;placing=fit;render() }
-            else if(pages.size<5) edit { pages.add(mutableListOf());page=pages.lastIndex;replacement=-1;placing=GridTile("widget:"+id,0,0,4,3) }
+            if(fit!=null) addChosen(fit,widgetReplacement)
+            else if(pages.size<5) { pages.add(mutableListOf());page=pages.lastIndex;addChosen(GridTile("widget:"+id,0,0,4,3),-1) }
             else Toast.makeText(this,"Make space for a 4×3 widget and try again",Toast.LENGTH_LONG).show()
             return
         }

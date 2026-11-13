@@ -81,7 +81,8 @@ internal object OfflineDestinationPicker {
         root.addView(scroll, LinearLayout.LayoutParams(MATCH, 0, 1f))
         val status = ui.text("", 12, t.textSecondary).apply { setPadding(ui.dp(24), ui.dp(4), ui.dp(24), ui.dp(8)) }
         root.addView(status, LinearLayout.LayoutParams(MATCH, WRAP))
-        val credit = "${pack.region} offline · © OpenStreetMap contributors"
+        // A composite index names all of its sources (pack manifest), not only OpenStreetMap.
+        val credit = "${pack.region} offline · " + (pack.searchCredit?.let { "Search data: $it" } ?: "© OpenStreetMap contributors")
 
         fun pick(place: Place) {
             saved.addRecent(place)

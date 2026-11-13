@@ -21,10 +21,12 @@ import org.maplibre.android.maps.MapView
 import org.maplibre.android.maps.Style
 import org.maplibre.android.style.expressions.Expression
 import org.maplibre.android.style.layers.LineLayer
+import org.maplibre.android.style.layers.FillExtrusionLayer
 import org.maplibre.android.style.layers.Property
 import org.maplibre.android.style.layers.PropertyFactory
 import org.maplibre.android.style.layers.SymbolLayer
 import org.maplibre.android.style.sources.GeoJsonSource
+import org.maplibre.android.style.sources.VectorSource
 import java.util.Locale
 
 /**
@@ -114,6 +116,21 @@ internal class VectorMapView(
 
     private fun styled(s: Style) {
         style = s
+        if (ProfileStore.preferences(context).getBoolean(Keys.OFFLINE_MAP_BUILDINGS,false)) {
+            vector.buildings?.let { file ->
+                s.addSource(VectorSource("flare-buildings-source", "mbtiles://${file.absolutePath}"))
+                val buildings = FillExtrusionLayer("flare-buildings", "flare-buildings-source").apply {
+                    sourceLayer = "building"
+                    minZoom = 15.5f
+                    setProperties(PropertyFactory.fillExtrusionColor("#26374e"),
+                        PropertyFactory.fillExtrusionHeight(Expression.get("height")),
+                        PropertyFactory.fillExtrusionBase(Expression.get("min_height")),
+                        PropertyFactory.fillExtrusionOpacity(0.85f))
+                }
+                // Keep navigation lines and road labels above the simple building layer.
+                if (s.getLayer("road-casing") != null) s.addLayerBelow(buildings,"road-casing") else s.addLayer(buildings)
+            }
+        }
         s.addImage(ARROW, marker(true))
         s.addImage(DOT, marker(false))
         s.addSource(GeoJsonSource(ALTERNATIVES, EMPTY))
@@ -238,6 +255,8 @@ internal class VectorMapView(
         glide?.cancel()
         val from = position
         val fromHeading = this.heading
+        // Parked (same position and heading): nothing to animate, so the GPU stays idle between fixes.
+        if (from != null && from.distanceTo(target) < 0.3 && heading == this.heading) { applyPendingAhead(); return }
         val duration = if (from == null || !isShown) null else NavMotion.glide(gap, from.distanceTo(target))
         if (duration == null || from == null) { position = target; this.heading = heading; drawVehicle(); applyPendingAhead(); if (tracking) camera(false); return }
         val origin: LatLng = from
@@ -330,7 +349,11 @@ internal class VectorMapView(
             .padding(0.0, 0.0, 0.0, 0.0).build()), 400)
     }
 
-    fun zoomBy(delta: Double) { map?.easeCamera(CameraUpdateFactory.zoomBy(delta), 250) }
+    fun zoomBy(delta: Double) {
+        val m = map ?: return
+        // While following, the marker glide moves the camera every frame and would cut an eased zoom short.
+        if (tracking) m.moveCamera(CameraUpdateFactory.zoomBy(delta)) else m.easeCamera(CameraUpdateFactory.zoomBy(delta), 250)
+    }
 
     fun center(): Pair<Double, Double>? = map?.cameraPosition?.target?.let { it.latitude to it.longitude }
 

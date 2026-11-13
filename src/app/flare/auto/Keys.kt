@@ -126,6 +126,8 @@ internal object Keys {
     const val OFFLINE_MAP_URL = "offline_map_url"
     /** Use the MapLibre vector map when the navigation pack has one (default on). */
     const val OFFLINE_MAP_VECTOR = "offline_map_vector"
+    /** Optional extruded buildings on the MapLibre map when the pack has them (default off). */
+    const val OFFLINE_MAP_BUILDINGS = "offline_map_buildings"
     /** Vector map orientation while following GPS: true = heading-up 3D, false = north-up. */
     const val OFFLINE_MAP_HEADING_UP = "offline_map_heading_up"
     const val OFFLINE_NAV_ACTIVE = "offline_nav_active"
@@ -147,7 +149,7 @@ internal object Keys {
     /** Keys whose change requires Home to be rebuilt the next time it resumes. */
     val HOME_UI: Set<String> = setOf(
         DASHBOARD_PAGES, DASHBOARD_DEFAULT, OFFLINE_MAP_ENABLED, OFFLINE_MAP_LAT, OFFLINE_MAP_LON, OFFLINE_MAP_SPAN, OFFLINE_MAP_SPAN_METRES,
-        OFFLINE_MAP_FOLLOW, OFFLINE_MAP_VECTOR, THEME_MODE, THEME_DAY_HOUR, THEME_NIGHT_HOUR, LIGHT_THEME_INDEX, DARK_THEME_INDEX, THEME,
+        OFFLINE_MAP_FOLLOW, OFFLINE_MAP_VECTOR, OFFLINE_MAP_BUILDINGS, THEME_MODE, THEME_DAY_HOUR, THEME_NIGHT_HOUR, LIGHT_THEME_INDEX, DARK_THEME_INDEX, THEME,
         ACCENT_COLOR, BRAND_TEXT, BADGE_TEXT, BRAND_COLOR, BADGE_COLOR, WIDGET_LEFT, WIDGET_RIGHT, HOME_CLOCK_STYLE,
         SOLAR_MANUAL, SOLAR_LAT, SOLAR_LON, CUSTOM_REVISION, LEGACY_HOME_WALLPAPER, WALLPAPER_HOME, GLASS_CARDS,
         WEATHER_ENABLED, WEATHER_AGE_DAYS, WEATHER_FAHRENHEIT, FLIP_GRADIENTS, SPLIT, SPACING, DOCK, DOCK_ORDER,
