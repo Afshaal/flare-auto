@@ -94,6 +94,10 @@ internal class NavGlyph(context: Context, private val kind: String, color: Int) 
                 canvas.drawLine(6f, 7f, 16f, 3f, paint); canvas.drawLine(6f, 12f, 12f, 12f, paint)
                 canvas.drawLine(6f, 15f, 12f, 15f, paint); canvas.drawCircle(17f, 14f, 2f, paint)
             }
+            "navigation" -> {
+                path.moveTo(12f, 3f); path.lineTo(19f, 20f); path.lineTo(12f, 16f); path.lineTo(5f, 20f); path.close()
+                canvas.drawPath(path, paint)
+            }
             "bluetooth" -> {
                 path.moveTo(12f, 2f); path.lineTo(12f, 22f); path.lineTo(18f, 17f); path.lineTo(6f, 7f)
                 path.moveTo(6f, 17f); path.lineTo(18f, 7f); path.lineTo(12f, 2f); canvas.drawPath(path, paint)
@@ -156,6 +160,12 @@ internal class NavGlyph(context: Context, private val kind: String, color: Int) 
             "guide" -> {
                 canvas.drawRoundRect(4f, 2f, 20f, 22f, 2f, 2f, paint); canvas.drawLine(8f, 2f, 8f, 22f, paint)
                 canvas.drawLine(11f, 8f, 17f, 8f, paint); canvas.drawLine(11f, 12f, 17f, 12f, paint)
+            }
+            // Side-dock Apps button: a compact 3 x 3 grid of filled squares.
+            "apps_filled" -> {
+                paint.style = Paint.Style.FILL
+                for (y in 3 until 18 step 7) for (x in 3 until 18 step 7) canvas.drawRoundRect(x.toFloat(), y.toFloat(), x + 5f, y + 5f, 1.2f, 1.2f, paint)
+                paint.style = Paint.Style.STROKE
             }
             "apps" -> for (y in 4 until 19 step 7) for (x in 4 until 19 step 7) {
                 canvas.drawRoundRect(x.toFloat(), y.toFloat(), x + 4f, y + 4f, 1f, 1f, paint)

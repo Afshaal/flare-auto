@@ -45,6 +45,8 @@ internal class HomeCards(
     private val textScale = prefs.textScale
     private val white = theme.textPrimary
     private val muted = theme.textSecondary
+    /** Light theme: weather glyphs use their deeper colours (see [SolarIcon]). */
+    private val lightTheme = android.graphics.Color.luminance(theme.background) > .5f
     val environments = ArrayList<EnvironmentInfo>()
     val maps = ArrayList<OfflineMapCard>()
     var playbackButton: ImageView? = null
@@ -110,8 +112,12 @@ internal class HomeCards(
             LinearLayout.LayoutParams(0, dp(56), 1f).apply { leftMargin = dp(5) })
     }
 
-    /** Adds the card of type [card] to [content] with layout [weight]. */
-    fun build(content: LinearLayout, card: String, compact: Boolean = false, weight: Float = 1f) {
+    /** Clock style of the card being built ([GridTile.style]); null uses the Home clock style preference. */
+    private var clockStyle: String? = null
+
+    /** Adds the card of type [card] to [content] with layout [weight]; [style]: a clock card's own clock style. */
+    fun build(content: LinearLayout, card: String, compact: Boolean = false, weight: Float = 1f, style: String? = null) {
+        clockStyle = style
         val params = LinearLayout.LayoutParams(0, MATCH, weight)
         when (card) {
             "clock", "clock_only", "clock_minimal" -> buildClockCard(content, params, compact, card)
@@ -119,7 +125,12 @@ internal class HomeCards(
             "media", "media_wide", "media_compact" -> buildMediaCard(content, params, compact || card != "media", card == "media_compact")
             "media_album" -> buildAlbumCard(content, params)
             "clock_date" -> buildDateClockCard(content, params)
+            "clock_gauge" -> buildGaugeClockCard(content, params)
+            "clock_weather" -> buildWeatherClockCard(content, params)
+            "clock_split" -> buildSplitClockCard(content, params)
             "weather", "weather_solar" -> buildWeatherCard(content, params, card == "weather_solar")
+            "weather_compact" -> buildCompactWeatherCard(content, params)
+            "weather_wide" -> buildWideWeatherCard(content, params)
             "apps" -> buildAppCard(content, params)
             "offline_map" -> OfflineMapCard(activity, context, sampleData, preview = true).also { maps.add(it); content.addView(it, params) }
             else -> if (HostedWidgets.id(card) != null) content.addView(HostedWidgets.view(activity, context, card, preview), params)
@@ -132,12 +143,72 @@ internal class HomeCards(
         icon.setWeather(if (mode == "sun") null else 2)
     }
 
+    /** Text that shrinks (between [min] and [max] sp) to fit its box instead of clipping on small cards. */
+    private fun fitted(view: TextView, min: Int, max: Int): TextView = view.apply {
+        // maxLines, not singleLine: single-line mode scrolls horizontally, which turns auto-sizing off (text clipped).
+        if (maxLines !in 2..10) maxLines = 1
+        val low = (min * textScale).toInt().coerceAtLeast(1)
+        setAutoSizeTextTypeUniformWithConfiguration(low, (max * textScale).toInt().coerceAtLeast(low + 1), 1,
+            android.util.TypedValue.COMPLEX_UNIT_SP)
+    }
+
+    /**
+     * "Compact weather": condition icon and temperature from the cached forecast. Without one it shows the next sunrise
+     * or sunset (useful offline) and a short line saying why: weather off, no location, or no recent forecast.
+     */
+    private fun buildCompactWeatherCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val box = column().apply { gravity = Gravity.CENTER; background = shape(12); pad(this, 12, 8) }
+        content.addView(box, params)
+        val line = row().apply { gravity = Gravity.CENTER }
+        val icon = SolarIcon(context, muted, lightTheme)
+        val temperature = fitted(text("", 40, white, true), 12, 44)
+        line.addView(icon, LinearLayout.LayoutParams(dp(44), dp(44)))
+        line.addView(temperature, LinearLayout.LayoutParams(0, MATCH, 1f).apply { leftMargin = dp(6) })
+        box.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        val status = fitted(text("", 12, muted, false).apply { maxLines = 2; gravity = Gravity.CENTER }, 9, 13)
+        box.addView(status, LinearLayout.LayoutParams(MATCH, dp(34)))
+        if (sampleData) { sample(temperature, icon, "auto"); status.text = weatherName(2) }
+        else environments.add(EnvironmentInfo(context, temperature, icon, "auto", condition = status))
+    }
+
+    /**
+     * "Wide weather": icon and temperature on the left; condition (or why there is no forecast) and the next sunrise
+     * or sunset on the right, with the theme accent between them. Same cached data as the other weather cards.
+     */
+    private fun buildWideWeatherCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = row().apply { background = shape(12); pad(this, 14, 8); gravity = Gravity.CENTER_VERTICAL }
+        content.addView(card, params)
+        val icon = SolarIcon(context, muted, lightTheme)
+        val temperature = fitted(text("", 40, white, true), 14, 46)
+        card.addView(icon, LinearLayout.LayoutParams(dp(48), dp(48)))
+        card.addView(temperature, LinearLayout.LayoutParams(0, dp(56), .9f).apply { leftMargin = dp(8) })
+        card.addView(View(context).apply { setBackgroundColor((theme.accent and 0x00ffffff) or 0x99000000.toInt()) },
+            LinearLayout.LayoutParams(dp(2), MATCH).apply { setMargins(dp(10), dp(12), dp(12), dp(12)) })
+        val right = column().apply { gravity = Gravity.CENTER_VERTICAL }
+        card.addView(right, LinearLayout.LayoutParams(0, MATCH, 1.3f))
+        val condition = fitted(text("", 17, white, true).apply { maxLines = 2 }, 10, 18)
+        right.addView(condition, LinearLayout.LayoutParams(MATCH, dp(44)))
+        val sunLine = row()
+        val sunIcon = SolarIcon(context, theme.accent, lightTheme)
+        val sun = fitted(text("", 14, muted, false), 9, 15)
+        sunLine.addView(sunIcon, LinearLayout.LayoutParams(dp(22), dp(22)))
+        sunLine.addView(sun, LinearLayout.LayoutParams(0, dp(24), 1f).apply { leftMargin = dp(6) })
+        right.addView(sunLine, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(4) })
+        if (sampleData) { sample(temperature, icon, "auto"); condition.text = weatherName(2); sun.text = "Sunset 05:42 PM" }
+        else {
+            // Without a forecast the temperature slot already shows the next sunrise / sunset; do not repeat it.
+            environments.add(EnvironmentInfo(context, temperature, icon, "auto", condition = condition,
+                forecastShown = { shown -> sunLine.visibility = if (shown) View.VISIBLE else View.GONE }))
+            environments.add(EnvironmentInfo(context, sun, sunIcon, "sun", eventName = true))
+        }
+    }
+
     private fun buildWeatherCard(content: LinearLayout, params: LinearLayout.LayoutParams, both: Boolean) {
         val box = column().apply { gravity = Gravity.CENTER; background = shape(12); pad(this, 16, 12) }
         content.addView(box, params)
         for (mode in if (both) listOf("auto", "sun") else listOf("auto")) {
             val line = row().apply { gravity = Gravity.CENTER }
-            val icon = SolarIcon(context, muted)
+            val icon = SolarIcon(context, muted, lightTheme)
             val label = text("", 18, white, false)
             line.addView(icon, LinearLayout.LayoutParams(dp(38), dp(38)))
             line.addView(label)
@@ -194,7 +265,7 @@ internal class HomeCards(
         val badges = row()
         fun corner(kind: String, alignRight: Boolean): View {
             if (kind == "off") return View(context)
-            val holder = row().apply { gravity = (if (alignRight) Gravity.RIGHT else Gravity.LEFT) or Gravity.CENTER_VERTICAL }
+            val holder = row().apply { gravity = (if (alignRight) Gravity.END else Gravity.START) or Gravity.CENTER_VERTICAL }
             if (kind == "trim") {
                 val badgeText = (prefs.getString(Keys.BADGE_TEXT, Defaults.TRIM_BADGE) ?: Defaults.TRIM_BADGE).trim()
                 val badgeColor = prefs.getInt(Keys.BADGE_COLOR, theme.accent)
@@ -203,7 +274,7 @@ internal class HomeCards(
                 return holder
             }
             val solar = text("", 11, muted, false)
-            val solarIcon = SolarIcon(context, muted)
+            val solarIcon = SolarIcon(context, muted, lightTheme)
             holder.addView(solarIcon, LinearLayout.LayoutParams(dp(24), dp(38)))
             holder.addView(solar, LinearLayout.LayoutParams(WRAP, dp(38)).apply { leftMargin = dp(5) })
             if (sampleData) sample(solar, solarIcon, kind) else environments.add(EnvironmentInfo(context, solar, solarIcon, kind))
@@ -213,7 +284,7 @@ internal class HomeCards(
         badges.addView(corner(prefs.getString(Keys.WIDGET_RIGHT, "trim") ?: "trim", true), LinearLayout.LayoutParams(0, dp(38), 1f))
         card.addView(badges, LinearLayout.LayoutParams(MATCH, dp(38)))
         // Home dims after sunset from the first environment; keep one even when no corner shows solar data.
-        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
+        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted, lightTheme), "sun"))
 
         val center = column().apply { gravity = Gravity.CENTER }
         card.addView(center, LinearLayout.LayoutParams(MATCH, 0, 1f))
@@ -234,7 +305,7 @@ internal class HomeCards(
             maxLines = 1
             includeFontPadding = false
             setTextColor(white)
-            typeface = ClockStyles.typeface(prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
+            typeface = ClockStyles.typeface(clockStyle ?: prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
             gravity = Gravity.CENTER
         }
         center.addView(clock, LinearLayout.LayoutParams(MATCH, 0, 1f))
@@ -251,18 +322,26 @@ internal class HomeCards(
         projectionButtons(projection)
     }
 
+    /**
+     * "Artwork player" (tall), "Wide player" (and the artwork player on short cards) and "Compact player". Each fills
+     * its card: the tall one stacks large square artwork, centred title and artist, progress and controls; the wide
+     * one puts artwork as tall as the card beside the title, artist, progress and controls; the compact one keeps the
+     * title and artist beside the controls with a slim progress bar below. All three share the views Home fills
+     * (artwork or note glyph, marquee title, seek row only when the track has a duration) and the same playback
+     * callbacks; the play button is emphasised.
+     */
     private fun buildMediaCard(content: LinearLayout, params: LinearLayout.LayoutParams, compact: Boolean, controlsOnly: Boolean = false) {
+        val tall = !compact
         val audio = column().apply {
-            pad(this, 16, 10)
+            if (tall) pad(this, 16, 14) else pad(this, 14, 10)
             background = shape(12)
         }
         content.addView(audio, params)
         val source = text("", 11, muted, false).apply {
             gravity = Gravity.START or Gravity.CENTER_VERTICAL
-            visibility = View.GONE
+            visibility = View.GONE; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
         }
         sourceLabel = source
-        audio.addView(source, LinearLayout.LayoutParams(MATCH, WRAP))
         val hint = text("Enable media access", 12, theme.accent, false).apply {
             if (preview) visibility = View.GONE
             gravity = Gravity.CENTER
@@ -270,47 +349,80 @@ internal class HomeCards(
         }
         mediaAccessHint = hint
         audio.addView(hint, LinearLayout.LayoutParams(MATCH, WRAP))
-        val metadata = (if (compact) row() else column()).apply { gravity = Gravity.CENTER }
-        audio.addView(metadata, LinearLayout.LayoutParams(MATCH, 0, 1f))
         val art = ImageView(context).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = GradientDrawable().apply {
-                setColor(theme.background)
-                cornerRadius = dp(8).toFloat()
-            }
+            background = GradientDrawable().apply { setColor(theme.background); cornerRadius = dp(if (tall) 12 else 10).toFloat() }
             clipToOutline = true
         }
         albumArt = art
-        val artArea = FrameLayout(context)
-        if (controlsOnly) artArea.visibility = View.GONE
-        metadata.addView(artArea, if (compact) LinearLayout.LayoutParams(0, MATCH, .42f) else LinearLayout.LayoutParams(MATCH, 0, 1f))
-        artArea.addView(art, FrameLayout.LayoutParams(MATCH, MATCH, Gravity.CENTER))
-        // Square artwork: as large as the area allows, minus a small margin.
-        artArea.addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->
-            val size = maxOf(1, minOf(right - left, bottom - top) - dp(10))
-            art.layoutParams?.let {
-                if (it.width != size || it.height != size) {
-                    it.width = size
-                    it.height = size
-                    art.layoutParams = it
-                }
-            }
-        }
-        val labels = column().apply { setPadding(0, dp(2), 0, dp(3)); if (compact) gravity = Gravity.CENTER }
-        metadata.addView(labels, if (compact) LinearLayout.LayoutParams(0, MATCH, .58f) else LinearLayout.LayoutParams(MATCH, WRAP))
-        val title = text("No media playing", 16, white, true).apply {
+        val title = text("No media playing", if (tall) 17 else 16, white, true).apply {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.MARQUEE
             marqueeRepeatLimit = -1
             isSelected = true
-            gravity = Gravity.CENTER
+            gravity = if (tall) Gravity.CENTER else Gravity.START or Gravity.CENTER_VERTICAL
         }
         trackTitle = title
-        labels.addView(title)
-        trackArtist = text("", 12, muted, false).apply {
-            isSingleLine = true
-            gravity = Gravity.CENTER
-        }.also { labels.addView(it) }
+        val artist = text("", if (tall) 13 else 12, muted, false).apply {
+            isSingleLine = true; ellipsize = TextUtils.TruncateAt.END
+            gravity = if (tall) Gravity.CENTER else Gravity.START or Gravity.CENTER_VERTICAL
+        }
+        trackArtist = artist
+        val seek = seekRow(if (compact && controlsOnly) 24 else if (tall) 32 else 28)
+        val controls = mediaControls(if (tall) 56 else if (controlsOnly) 44 else 46, wide = !controlsOnly)
+        when {
+            tall -> {
+                audio.addView(source, LinearLayout.LayoutParams(MATCH, WRAP))
+                val artArea = FrameLayout(context)
+                audio.addView(artArea, LinearLayout.LayoutParams(MATCH, 0, 1f).apply { topMargin = dp(4) })
+                artArea.addView(art, FrameLayout.LayoutParams(dp(96), dp(96), Gravity.CENTER))
+                squareArt(artArea, art, 1f)
+                audio.addView(title, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(10) })
+                audio.addView(artist, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) })
+                audio.addView(seek, LinearLayout.LayoutParams(MATCH, dp(32)).apply { topMargin = dp(4) })
+                audio.addView(controls, LinearLayout.LayoutParams(MATCH, dp(60)))
+            }
+            controlsOnly -> {
+                val line = row()
+                audio.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
+                val labels = column().apply { gravity = Gravity.CENTER_VERTICAL }
+                line.addView(labels, LinearLayout.LayoutParams(0, MATCH, 1f))
+                labels.addView(source, LinearLayout.LayoutParams(MATCH, WRAP))
+                labels.addView(title, LinearLayout.LayoutParams(MATCH, WRAP))
+                labels.addView(artist, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(1) })
+                line.addView(controls, LinearLayout.LayoutParams(WRAP, MATCH).apply { leftMargin = dp(10) })
+                audio.addView(seek, LinearLayout.LayoutParams(MATCH, dp(24)))
+            }
+            else -> {
+                val line = row().apply { gravity = Gravity.CENTER_VERTICAL }
+                audio.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
+                val artArea = FrameLayout(context)
+                line.addView(artArea, LinearLayout.LayoutParams(dp(96), MATCH))
+                artArea.addView(art, FrameLayout.LayoutParams(dp(96), dp(96), Gravity.CENTER_VERTICAL or Gravity.START))
+                // Artwork as tall as the card (at most 42 % of its width); the area follows so the text sits beside it.
+                line.addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->
+                    val size = maxOf(1, minOf(bottom - top, (right - left) * 42 / 100))
+                    val area = artArea.layoutParams
+                    if (area.width != size) { area.width = size; artArea.post { artArea.layoutParams = area } }
+                    art.layoutParams?.let { if (it.width != size || it.height != size) { it.width = size; it.height = size; art.post { art.layoutParams = it } } }
+                }
+                val labels = column().apply { setPadding(dp(14), 0, 0, 0) }
+                line.addView(labels, LinearLayout.LayoutParams(0, MATCH, 1f))
+                labels.addView(source, LinearLayout.LayoutParams(MATCH, WRAP))
+                labels.addView(title, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) })
+                labels.addView(artist, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(1) })
+                labels.addView(View(context), LinearLayout.LayoutParams(MATCH, 0, 1f))
+                labels.addView(seek, LinearLayout.LayoutParams(MATCH, dp(28)))
+                labels.addView(controls, LinearLayout.LayoutParams(MATCH, dp(48)))
+            }
+        }
+        audio.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) updateMediaWidth(right - left, controls, seek, title, if (tall) 17 else 16)
+        }
+    }
+
+    /** Elapsed time, progress bar and total time (shown by Home only when the track has a duration). */
+    private fun seekRow(height: Int): LinearLayout {
         val seek = row()
         seekRow = seek
         val elapsedText = text("0:00", 11, muted, false).also { elapsed = it }
@@ -322,10 +434,8 @@ internal class HomeCards(
         }
         progress = bar
         seek.addView(elapsedText)
-        seek.addView(bar, LinearLayout.LayoutParams(0, dp(40), 1f))
+        seek.addView(bar, LinearLayout.LayoutParams(0, dp(height), 1f))
         seek.addView(totalText)
-        seek.minimumHeight = dp(40)
-        (if (compact) labels else audio).addView(seek)
         bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, value: Int, fromUser: Boolean) = Unit
             override fun onStartTrackingTouch(seekBar: SeekBar) = onDragging(true)
@@ -334,23 +444,38 @@ internal class HomeCards(
                 onSeek(seekBar.progress.toLong())
             }
         })
-        val controls = row().apply { gravity = Gravity.CENTER; minimumHeight = dp(56) }
-        (if (compact) labels else audio).addView(controls, LinearLayout.LayoutParams(MATCH, dp(56)))
-        audio.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
-            if (right - left != oldRight - oldLeft) updateMediaWidth(right - left, controls, seek, title)
-        }
+        return seek
+    }
+
+    /**
+     * Previous / play-pause / next. [wide]: spread evenly across the row; otherwise packed together. The play button
+     * sits on a soft accent disc so it reads first.
+     */
+    private fun mediaControls(height: Int, wide: Boolean): LinearLayout {
+        val controls = row().apply { gravity = Gravity.CENTER; minimumHeight = dp(height) }
         for (key in MEDIA_KEYS) {
+            val play = key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE
             val control = ImageView(context).apply {
-                setPadding(dp(9), dp(9), dp(9), dp(9))
-                setImageDrawable(MediaGlyph(when (key) {
-                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "play"
-                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "previous"
-                    else -> "next"
-                }, white))
+                val pad = if (play) dp(11) else dp(9)
+                setPadding(pad, pad, pad, pad)
+                setImageDrawable(MediaGlyph(if (play) "play" else if (key == KeyEvent.KEYCODE_MEDIA_PREVIOUS) "previous" else "next", white))
+                if (play) background = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor((theme.accent and 0x00ffffff) or 0x33000000) }
+                contentDescription = if (play) "Play or pause" else if (key == KeyEvent.KEYCODE_MEDIA_PREVIOUS) "Previous track" else "Next track"
                 setOnClickListener { onMedia(key) }
             }
-            if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) playbackButton = control
-            controls.addView(control, LinearLayout.LayoutParams(0, MATCH, 1f).apply { rightMargin = dp(6) })
+            if (play) playbackButton = control
+            val size = if (play) dp(height) else dp(height - 8)
+            controls.addView(control, if (wide) LinearLayout.LayoutParams(0, size, 1f).let { lp -> lp.apply { if (play) { width = size; weight = 0f; leftMargin = dp(18); rightMargin = dp(18) } } }
+                else LinearLayout.LayoutParams(size, size).apply { if (play) { leftMargin = dp(6); rightMargin = dp(6) } })
+        }
+        return controls
+    }
+
+    /** Keeps [art] square inside [area]: as large as [fraction] of the area's smaller side allows. */
+    private fun squareArt(area: FrameLayout, art: ImageView, fraction: Float) {
+        area.addOnLayoutChangeListener { _, left, top, right, bottom, _, _, _, _ ->
+            val size = maxOf(1, (minOf(right - left, bottom - top) * fraction).toInt())
+            art.layoutParams?.let { if (it.width != size || it.height != size) { it.width = size; it.height = size; art.post { art.layoutParams = it } } }
         }
     }
 
@@ -387,8 +512,8 @@ internal class HomeCards(
         }
         val labels = column().apply { setPadding(dp(14), dp(2), 0, 0) }
         top.addView(labels, LinearLayout.LayoutParams(0, MATCH, 1f))
-        sourceLabel = text("", 11, muted, false).apply { visibility = View.GONE; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END }
-            .also { labels.addView(it) }
+        // No source label on this card ([sourceLabel] stays null; Home skips it).
+        sourceLabel = null
         trackTitle = text("No media playing", 17, white, true).apply {
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.MARQUEE
@@ -461,7 +586,7 @@ internal class HomeCards(
         }
         content.addView(card, params)
         // Home dims after sunset from the first environment (as the other clock cards do).
-        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
+        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted, lightTheme), "sun"))
         val format = if (prefs.clock24) "HH:mm" else "h:mm"
         val clock = TextClock(context).apply {
             format12Hour = format
@@ -471,7 +596,7 @@ internal class HomeCards(
             maxLines = 1
             includeFontPadding = false
             setTextColor(white)
-            typeface = ClockStyles.typeface(prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
+            typeface = ClockStyles.typeface(clockStyle ?: prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
             gravity = Gravity.CENTER
         }
         card.addView(clock, LinearLayout.LayoutParams(MATCH, 0, 1f))
@@ -489,11 +614,129 @@ internal class HomeCards(
         card.addView(date, LinearLayout.LayoutParams(MATCH, WRAP))
     }
 
-    private fun updateMediaWidth(pixels: Int, controls: LinearLayout, seek: LinearLayout, title: TextView) {
+    /** Time in the card's clock style and the 12/24-hour setting, as large as its space allows (up to [maxSp]). */
+    private fun clockText(maxSp: Int, pattern12: String = "h:mm", pattern24: String = "HH:mm"): TextClock = TextClock(context).apply {
+        val format = if (prefs.clock24) pattern24 else pattern12
+        format12Hour = format
+        format24Hour = format
+        val top = maxOf(24, (maxSp * textScale).toInt())
+        textSize = top.toFloat()
+        setAutoSizeTextTypeUniformWithConfiguration(20, top, 1, TypedValue.COMPLEX_UNIT_SP)
+        maxLines = 1
+        includeFontPadding = false
+        setTextColor(white)
+        typeface = ClockStyles.typeface(clockStyle ?: prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
+        gravity = Gravity.CENTER
+    }
+
+    private fun dateText(pattern: String, size: Int, color: Int = muted): TextClock = TextClock(context).apply {
+        format12Hour = pattern
+        format24Hour = pattern
+        textSize = size * textScale
+        setTextColor(color)
+        maxLines = 1
+        ellipsize = TextUtils.TruncateAt.END
+        gravity = Gravity.CENTER
+    }
+
+    /** Vehicle name and trim badge from the existing preferences (each hidden when empty). */
+    private fun vehicleLabel(size: Int): LinearLayout {
+        val label = row().apply { gravity = Gravity.CENTER }
+        val brand = (prefs.getString(Keys.BRAND_TEXT, Defaults.VEHICLE_NAME) ?: "").trim()
+        val badge = (prefs.getString(Keys.BADGE_TEXT, Defaults.TRIM_BADGE) ?: "").trim()
+        if (brand.isNotEmpty()) label.addView(text(brand, size, prefs.getInt(Keys.BRAND_COLOR, theme.accent), true).apply {
+            letterSpacing = .3f; includeFontPadding = false; isSingleLine = true
+        })
+        val badgeColor = prefs.getInt(Keys.BADGE_COLOR, theme.accent)
+        if (badge.equals(Defaults.TRIM_BADGE_GLYPH, true)) label.addView(TrimBadge(context, badgeColor), LinearLayout.LayoutParams(dp(size * 2), dp((size * 1.45f).toInt())).apply { leftMargin = dp(6) })
+        else if (badge.isNotEmpty()) label.addView(text(badge, size, badgeColor, true).apply { includeFontPadding = false }, LinearLayout.LayoutParams(WRAP, WRAP).apply { leftMargin = dp(6) })
+        return label
+    }
+
+    /** Home dims after sunset from the first environment (as the other clock cards do). */
+    private fun keepEnvironment() {
+        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted, lightTheme), "sun"))
+    }
+
+    /**
+     * "Gauge clock" (wide): large centred time under a thin decorative half-ring with a short accent segment, the date
+     * below and the vehicle name / trim badge between two hairlines. The ring is decoration only.
+     */
+    private fun buildGaugeClockCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = FrameLayout(context).apply { background = shape(12) }
+        content.addView(card, params)
+        keepEnvironment()
+        card.addView(GaugeArc(context, muted, theme.accent), FrameLayout.LayoutParams(MATCH, MATCH))
+        val body = column().apply { gravity = Gravity.CENTER; pad(this, 24, 10) }
+        card.addView(body, FrameLayout.LayoutParams(MATCH, MATCH))
+        body.addView(View(context), LinearLayout.LayoutParams(MATCH, 0, .35f))
+        body.addView(clockText(72), LinearLayout.LayoutParams(MATCH, 0, 1.6f))
+        body.addView(dateText("EEEE, d MMMM", 14), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) })
+        val brandLine = row().apply { gravity = Gravity.CENTER }
+        fun hairline() = View(context).apply { setBackgroundColor((muted and 0x00ffffff) or 0x55000000) }
+        brandLine.addView(hairline(), LinearLayout.LayoutParams(dp(36), 1).apply { rightMargin = dp(10) })
+        brandLine.addView(vehicleLabel(11))
+        brandLine.addView(hairline(), LinearLayout.LayoutParams(dp(36), 1).apply { leftMargin = dp(10) })
+        body.addView(brandLine, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(6) })
+        body.addView(View(context), LinearLayout.LayoutParams(MATCH, 0, .25f))
+    }
+
+    /**
+     * "Clock with weather" (wide): time, accent line and date on the left; on the right the current weather and the
+     * next sunrise or sunset, from the existing weather / solar data (no extra requests).
+     */
+    private fun buildWeatherClockCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = row().apply { background = shape(12); pad(this, 18, 10) }
+        content.addView(card, params)
+        val left = column().apply { gravity = Gravity.CENTER }
+        card.addView(left, LinearLayout.LayoutParams(0, MATCH, 1.25f))
+        left.addView(clockText(64), LinearLayout.LayoutParams(MATCH, 0, 1f))
+        left.addView(View(context).apply { background = HomeChrome.accent(theme) },
+            LinearLayout.LayoutParams(dp(48), dp(2)).apply { topMargin = dp(4); bottomMargin = dp(6); gravity = Gravity.CENTER_HORIZONTAL })
+        left.addView(dateText("EEEE, d MMMM", 13), LinearLayout.LayoutParams(MATCH, WRAP))
+        card.addView(View(context).apply { setBackgroundColor((theme.accent and 0x00ffffff) or 0x80000000.toInt()) },
+            LinearLayout.LayoutParams(dp(1), MATCH).apply { setMargins(dp(14), dp(8), dp(14), dp(8)) })
+        val right = column().apply { gravity = Gravity.CENTER_VERTICAL }
+        card.addView(right, LinearLayout.LayoutParams(0, MATCH, 1f))
+        for (mode in listOf("auto", "sun")) {
+            val line = row()
+            val icon = SolarIcon(context, if (mode == "sun") theme.accent else muted, lightTheme)
+            val label = text("", 16, white, false).apply { isSingleLine = true; ellipsize = TextUtils.TruncateAt.END }
+            line.addView(icon, LinearLayout.LayoutParams(dp(30), dp(30)))
+            line.addView(label, LinearLayout.LayoutParams(0, WRAP, 1f).apply { leftMargin = dp(8) })
+            right.addView(line, LinearLayout.LayoutParams(MATCH, 0, 1f))
+            if (sampleData) sample(label, icon, mode) else environments.add(EnvironmentInfo(context, label, icon, mode))
+        }
+    }
+
+    /**
+     * "Split clock" (wide): hour over minutes on the left, an accent rule, the day and date on the right, and the
+     * vehicle name / trim badge in the upper right.
+     */
+    private fun buildSplitClockCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = FrameLayout(context).apply { background = shape(12) }
+        content.addView(card, params)
+        keepEnvironment()
+        val body = row().apply { pad(this, 22, 10) }
+        card.addView(body, FrameLayout.LayoutParams(MATCH, MATCH))
+        val time = column().apply { gravity = Gravity.CENTER }
+        body.addView(time, LinearLayout.LayoutParams(0, MATCH, .8f))
+        time.addView(clockText(54, "h", "HH"), LinearLayout.LayoutParams(MATCH, 0, 1f))
+        time.addView(clockText(54, "mm", "mm"), LinearLayout.LayoutParams(MATCH, 0, 1f))
+        body.addView(View(context).apply { setBackgroundColor(theme.accent) },
+            LinearLayout.LayoutParams(dp(2), MATCH).apply { setMargins(dp(10), dp(14), dp(18), dp(14)) })
+        val date = column().apply { gravity = Gravity.CENTER_VERTICAL }
+        body.addView(date, LinearLayout.LayoutParams(0, MATCH, 1.4f))
+        date.addView(dateText("EEEE,", 18, white).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL })
+        date.addView(dateText("d MMMM", 18, white).apply { gravity = Gravity.START or Gravity.CENTER_VERTICAL })
+        card.addView(vehicleLabel(10), FrameLayout.LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.END).apply { setMargins(0, dp(10), dp(16), 0) })
+    }
+
+    private fun updateMediaWidth(pixels: Int, controls: LinearLayout, seek: LinearLayout, title: TextView, base: Int = 16) {
         val width = (pixels / context.resources.displayMetrics.density).toInt()
         if (!preview) onNarrow(false)
         seek.visibility = if (duration() > 0) View.VISIBLE else View.GONE
-        title.textSize = (if (width < 230) 14 else 16) * textScale
+        title.textSize = (if (width < 230) base - 2 else base) * textScale
         controls.visibility = View.VISIBLE
     }
 

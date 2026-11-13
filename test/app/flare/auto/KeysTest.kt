@@ -28,7 +28,7 @@ class KeysTest {
             "saver_weather", "saver_solar", "saver_music_banner", "saver_banners", "saver_banner_private",
             "saver_banner_apps", "saver_banner_position", "saver_banner_seconds", "saver_banner_size",
             "offline_map_enabled", "offline_map_lat", "offline_map_lon", "offline_map_span", "offline_map_follow",
-            "offline_map_url", "offline_map_vector", "offline_map_buildings", "offline_map_heading_up", "offline_nav_active", "offline_nav_lat", "offline_nav_lon", "offline_nav_name",
+            "offline_map_url", "offline_map_vector", "offline_map_buildings", "offline_map_style", "offline_map_heading_up", "offline_nav_active", "offline_nav_lat", "offline_nav_lon", "offline_nav_name",
             "offline_nav_voice", "_editor_image",
             // 1.2.0 maplibre-r3: offline search places and the sub-minute screensaver timeout (new keys only).
             "offline_places_starred", "offline_places_recent", "offline_place_home", "offline_place_work",
@@ -39,7 +39,9 @@ class KeysTest {
             "offline_nav_via",
             // typical traffic adjustment of arrival estimates (new keys only).
             "offline_nav_trip_m", "offline_eta_traffic", "offline_eta_peak", "offline_eta_morning", "offline_eta_evening",
-            "offline_eta_school", "offline_eta_school_time", "offline_eta_days")
+            "offline_eta_school", "offline_eta_school_time", "offline_eta_days",
+            // r14: dock placement (new key only).
+            "dock_position")
         val values = constants().values
         assertEquals("a key constant was added, removed or renamed", expected, values.toSet())
         assertEquals("two constants share one key", values.size, values.toSet().size)
@@ -48,7 +50,7 @@ class KeysTest {
     @Test
     fun homeRebuildKeysAreRealKeys() {
         val all = constants().values.toSet()
-        assertEquals(50, Keys.HOME_UI.size) // 1.2.0 r8: + offline_map_buildings
+        assertEquals(52, Keys.HOME_UI.size) // r14: + dock_position
         assertTrue(Keys.HOME_UI.minus(all).toString(), all.containsAll(Keys.HOME_UI))
         // Keys that change what Home draws must trigger a rebuild.
         for (key in listOf(Keys.DASHBOARD_PAGES, Keys.WALLPAPER_HOME, Keys.DOCK_ITEMS, Keys.TEXT, Keys.BRAND_TEXT, Keys.THEME_MODE))

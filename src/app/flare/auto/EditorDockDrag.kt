@@ -7,6 +7,7 @@ import android.widget.LinearLayout
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+/** Long-press drag to reorder dock cells along the dock's own axis (across for the bottom dock, down for a side dock). */
 internal class EditorDockDrag(private val dock:LinearLayout,private val scale:()->Float,private val commit:(Int,Int)->Unit,private val settled:()->Unit) {
     private val cells=List(dock.childCount) { dock.getChildAt(it) }
     private val slop=ViewConfiguration.get(dock.context).scaledTouchSlop
@@ -19,19 +20,33 @@ internal class EditorDockDrag(private val dock:LinearLayout,private val scale:()
     private var moved=false
     private var settling=false
     private var duration=0L
+    /** Set by [touch] when the gesture was a plain tap; the touch listener then performs the click. */
+    private var tapped=false
+    private val vertical=dock.orientation==LinearLayout.VERTICAL
+    private fun start(v:View)=if(vertical) v.top else v.left
+    private fun end(v:View)=if(vertical) v.bottom else v.right
+    private fun length(v:View)=if(vertical) v.height else v.width
+    private fun shift(v:View)=if(vertical) v.translationY else v.translationX
+    private fun shift(v:View,value:Float) { if(vertical) v.translationY=value else v.translationX=value }
+    private fun along(e:MotionEvent)=if(vertical) e.rawY-downY else e.rawX-downX
     private val hold=Runnable {
         if(source>=0 && !moved) {
             dragging=true;duration=if(Motion.enabled(dock.context)) 160L else 0L
             cells[source].apply {
                 elevation=lift*2
-                animate().scaleX(1.08f).scaleY(1.08f).translationY(-lift).setDuration(duration).start()
+                // The bottom dock lifts its cell; a side dock keeps it in its column, which is the drag axis.
+                animate().scaleX(1.08f).scaleY(1.08f).translationY(if(vertical) 0f else -lift).setDuration(duration).start()
                 performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
             }
         }
     }
     init {
         dock.clipChildren=false;dock.clipToPadding=false
-        cells.forEachIndexed { index,cell->cell.setOnTouchListener { _,e->touch(index,e) } }
+        cells.forEachIndexed { index,cell->cell.setOnTouchListener { v,e->
+            val handled=touch(index,e)
+            if(tapped) { tapped=false;v.performClick() }
+            handled
+        } }
         dock.addOnAttachStateChangeListener(object:View.OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v:View)=Unit
             override fun onViewDetachedFromWindow(v:View) {
@@ -53,17 +68,19 @@ internal class EditorDockDrag(private val dock:LinearLayout,private val scale:()
                     if(abs(e.rawX-downX)+abs(e.rawY-downY)>slop) { moved=true;dock.removeCallbacks(hold) }
                 } else {
                     val cell=cells[source]
-                    cell.translationX=((e.rawX-downX)/scale().coerceAtLeast(.01f)).coerceIn(-cell.left.toFloat(),(dock.width-cell.right).toFloat())
-                    val next=(source+cell.translationX/cell.width.coerceAtLeast(1)).roundToInt().coerceIn(cells.indices)
+                    val room=if(vertical) dock.height else dock.width
+                    shift(cell,(along(e)/scale().coerceAtLeast(.01f)).coerceIn(-start(cell).toFloat(),(room-end(cell)).toFloat()))
+                    val next=(source+shift(cell)/length(cell).coerceAtLeast(1)).roundToInt().coerceIn(cells.indices)
                     if(next!=target) {
                         target=next
                         cells.forEachIndexed { n,v->if(n!=source) {
                             val shift=when {
-                                source<target && n in source+1..target->-cell.width.toFloat()
-                                target<source && n in target until source->cell.width.toFloat()
+                                source<target && n in source+1..target->-length(cell).toFloat()
+                                target<source && n in target until source->length(cell).toFloat()
                                 else->0f
                             }
-                            v.animate().translationX(shift).setDuration(duration).start()
+                            if(vertical) v.animate().translationY(shift).setDuration(duration).start()
+                            else v.animate().translationX(shift).setDuration(duration).start()
                         } }
                     }
                 }
@@ -74,13 +91,14 @@ internal class EditorDockDrag(private val dock:LinearLayout,private val scale:()
                     val from=source;val to=if(e.actionMasked==MotionEvent.ACTION_CANCEL) source else target
                     settling=true
                     if(to!=from) commit(cells[from].tag as Int,cells[to].tag as Int)
-                    if(to==from) cells.forEach { it.animate().translationX(0f).setDuration(duration).start() }
-                    cells[from].animate().translationX((cells[to].left-cells[from].left).toFloat()).translationY(0f).scaleX(1f).scaleY(1f)
-                        .setDuration(duration).withEndAction {
+                    if(to==from) cells.forEach { (if(vertical) it.animate().translationY(0f) else it.animate().translationX(0f)).setDuration(duration).start() }
+                    val offset=(start(cells[to])-start(cells[from])).toFloat()
+                    (if(vertical) cells[from].animate().translationY(offset) else cells[from].animate().translationX(offset).translationY(0f))
+                        .scaleX(1f).scaleY(1f).setDuration(duration).withEndAction {
                             cells[from].elevation=0f;settling=false;source=-1
                             if(to!=from) settled()
                         }.start()
-                } else if(e.actionMasked==MotionEvent.ACTION_UP && !moved) cells[index].performClick()
+                } else if(e.actionMasked==MotionEvent.ACTION_UP && !moved) tapped=true
                 dragging=false
             }
         }

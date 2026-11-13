@@ -13,7 +13,13 @@ internal class EnvironmentInfo(
     private val context: Context,
     private val sun: TextView,
     private val icon: SolarIcon,
-    private val displayMode: String = "auto"
+    private val displayMode: String = "auto",
+    /** Weather widgets: the condition name, or why no forecast is shown (weather off, no location, none recent). */
+    private val condition: TextView? = null,
+    /** "sun" mode: name the event ("Sunset 5:42 PM") instead of the time alone. */
+    private val eventName: Boolean = false,
+    /** Told whether a forecast is shown (true) or the sunrise / sunset fallback (false). */
+    private val forecastShown: ((Boolean) -> Unit)? = null
 ) {
     private val preferences = ProfileStore.preferences(context)
     private val downloadedFormat by lazy { java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.SHORT, java.text.DateFormat.SHORT) }
@@ -111,8 +117,19 @@ internal class EnvironmentInfo(
                 icon.setDaytime(!night())
                 sun.contentDescription = "Forecast ${sun.text}; downloaded " + downloadedFormat.apply { timeZone = zone }.format(java.util.Date(weather.fetchedAt))
                 icon.setWeather(weather.code)
+                condition?.apply { text = weatherName(weather.code); setTextColor(ThemeTokens.get(context).textPrimary) }
+                forecastShown?.invoke(true)
                 return
             }
+        }
+        forecastShown?.invoke(false)
+        condition?.apply {
+            text = when {
+                !preferences.getBoolean(Keys.WEATHER_ENABLED, false) -> "Weather off \u00b7 turn on in Launcher settings"
+                lat.isNaN() -> "No location for weather"
+                else -> "No recent forecast \u00b7 updates when online"
+            }
+            setTextColor(ThemeTokens.get(context).textSecondary)
         }
         icon.setWeather(null)
         sun.setTextColor(ThemeTokens.get(context).textSecondary)
@@ -125,7 +142,7 @@ internal class EnvironmentInfo(
         }
         val state = SolarState(minute, sunrise, sunset, nextRise)
         val event = if (state.day) "Sunset" else "Sunrise"
-        sun.text = format(state.next)
+        sun.text = if (eventName && state.next >= 0) "$event ${format(state.next)}" else format(state.next)
         sun.contentDescription = if (state.next < 0) {
             "Sunrise or sunset unavailable"
         } else {

@@ -7,7 +7,9 @@ import android.graphics.Path
 import android.view.View
 import kotlin.math.min
 
-internal class SolarIcon(context: Context, private val color: Int) : View(context) {
+/** Sun / moon / weather glyph. [light]: drawn on a light theme, so the pale sky colours are replaced by deeper ones. */
+internal class SolarIcon(context: Context, private val color: Int, private val light: Boolean = false) : View(context) {
+    private fun tone(dark: Int, onLight: Int) = if (light) onLight else dark
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply {
         this.color = this@SolarIcon.color
         style = Paint.Style.STROKE
@@ -50,13 +52,13 @@ internal class SolarIcon(context: Context, private val color: Int) : View(contex
         canvas.save()
         canvas.translate(x, y)
         canvas.scale(scale, scale, 12f, 12f)
-        paint.color = 0xffd7e4ea.toInt()
+        paint.color = tone(0xffd7e4ea.toInt(), 0xff7f8f99.toInt())
         canvas.drawPath(cloud, paint)
         canvas.restore()
     }
 
     private fun drawSun(canvas: Canvas, x: Float, y: Float, radius: Float = 4f) {
-        paint.color = 0xffffc65a.toInt()
+        paint.color = tone(0xffffc65a.toInt(), 0xffe39a1c.toInt())
         canvas.drawCircle(x, y, radius, paint)
         for (i in 0..7) {
             val angle = i * Math.PI / 4
@@ -71,7 +73,7 @@ internal class SolarIcon(context: Context, private val color: Int) : View(contex
         canvas.save()
         canvas.translate(x, y)
         canvas.scale(scale, scale)
-        paint.color = 0xffb9d5e5.toInt()
+        paint.color = tone(0xffb9d5e5.toInt(), 0xff4f6f85.toInt())
         canvas.drawPath(moon, paint)
         canvas.restore()
     }
@@ -88,21 +90,21 @@ internal class SolarIcon(context: Context, private val color: Int) : View(contex
             when {
                 weather in 95..99 -> {
                     drawCloud(canvas, .86f, -1f, -2f)
-                    paint.color = 0xffffc65a.toInt()
+                    paint.color = tone(0xffffc65a.toInt(), 0xffe39a1c.toInt())
                     canvas.drawLine(13f, 16f, 10f, 20f, paint)
                     canvas.drawLine(10f, 20f, 13f, 20f, paint)
                     canvas.drawLine(13f, 20f, 11f, 23f, paint)
                 }
                 weather in 51..67 || weather in 80..82 -> {
                     drawCloud(canvas, .86f, -1f, -2f)
-                    paint.color = 0xff91d1e6.toInt()
+                    paint.color = tone(0xff91d1e6.toInt(), 0xff2f86a8.toInt())
                     canvas.drawLine(7f, 18f, 6f, 21f, paint)
                     canvas.drawLine(12f, 18f, 11f, 21f, paint)
                     canvas.drawLine(17f, 18f, 16f, 21f, paint)
                 }
                 weather in 71..77 || weather in 85..86 -> {
                     drawCloud(canvas, .86f, -1f, -2f)
-                    paint.color = 0xffa8d7e9.toInt()
+                    paint.color = tone(0xffa8d7e9.toInt(), 0xff5a98b3.toInt())
                     canvas.drawLine(9f, 18f, 9f, 22f, paint)
                     canvas.drawLine(7f, 20f, 11f, 20f, paint)
                     canvas.drawLine(15f, 18f, 15f, 22f, paint)

@@ -33,6 +33,15 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
     private val accent = ThemeTokens.get(context).accent
     private val density = resources.displayMetrics.density
     private var downX = 0f; private var downY = 0f
+    /** Screen x at touch down. Page drags measure from it: this board is the page being moved, so its own x
+     *  coordinates shift with the drag and would feed the page's offset back into the next move (held swipes jittered). */
+    private var downRawX = 0f
+    private fun pageDx(e: MotionEvent): Float {
+        var scale = 1f
+        var v: View? = this
+        while (v != null) { scale *= v.scaleX; v = v.parent as? View }
+        return (e.rawX - downRawX) / scale.coerceAtLeast(.01f)
+    }
     private var selected = -1; private var resizing = false; private var seek = false
     private var candidate: GridTile? = null
     init { setWillNotDraw(false) }
@@ -97,12 +106,12 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
     }
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
         if (editing) return true
-        if (e.actionMasked == MotionEvent.ACTION_DOWN) { downX=e.x; downY=e.y; seek=hitsSeek(this,e.x,e.y) }
+        if (e.actionMasked == MotionEvent.ACTION_DOWN) { downX=e.x; downY=e.y; downRawX=e.rawX; seek=hitsSeek(this,e.x,e.y) }
         return !seek && e.actionMasked == MotionEvent.ACTION_MOVE && abs(e.x-downX)>density*12 && abs(e.x-downX)>abs(e.y-downY)*1.3f
     }
     override fun onTouchEvent(e: MotionEvent): Boolean {
         if (!editing) {
-            val dx=e.x-downX
+            val dx=pageDx(e)
             if(e.actionMasked==MotionEvent.ACTION_MOVE) onPageDrag?.invoke(dx,false,false)
             if(e.actionMasked==MotionEvent.ACTION_UP) {
                 if(onPageDrag!=null) onPageDrag?.invoke(dx,true,false)
@@ -114,7 +123,7 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
         if (width == 0 || height == 0) return true
         when (e.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
-                downX=e.x; downY=e.y; deleteDownY=e.rawY
+                downX=e.x; downY=e.y; downRawX=e.rawX; deleteDownY=e.rawY
                 selected=tiles.indexOfFirst { e.x>=width*it.x/8f && e.x<width*(it.x+it.w)/8f && e.y>=height*it.y/6f && e.y<height*(it.y+it.h)/6f }
                 candidate=tiles.getOrNull(selected)
                 moving=false; paging=false; deleting=false; corner=-1
@@ -138,7 +147,7 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
                 if(!moving && !resizing && !paging && !deleting && placement==null && onPageDeleteDrag!=null && dy>density*12 && dy>abs(dx)*1.3f) { removeCallbacks(hold);deleting=true;candidate=null }
                 if(!deleting && !moving && !resizing && abs(dx)>density*12 && abs(dx)>abs(dy)*1.3f) { removeCallbacks(hold); paging=true }
                 if(deleting) onPageDeleteDrag?.invoke((e.rawY-deleteDownY).coerceAtLeast(0f),false,false)
-                else if(paging) onPageDrag?.invoke(dx,false,false)
+                else if(paging) onPageDrag?.invoke(pageDx(e),false,false)
                 else if(moving || resizing) tiles.getOrNull(selected)?.let { old ->
                     val gx=(dx*8/width).roundToInt(); val gy=(dy*6/height).roundToInt()
                     candidate=if(resizing) old.resizeEdge(corner,gx,gy)
@@ -149,7 +158,7 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
             MotionEvent.ACTION_UP -> {
                 removeCallbacks(hold)
                 if(deleting) { onPageDeleteDrag?.invoke((e.rawY-deleteDownY).coerceAtLeast(0f),true,false);deleting=false;parent?.requestDisallowInterceptTouchEvent(false);return true }
-                if(paging) { onPageDrag?.invoke(e.x-downX,true,false); candidate=null; return true }
+                if(paging) { onPageDrag?.invoke(pageDx(e),true,false); candidate=null; return true }
                 val moved=abs(e.x-downX)+abs(e.y-downY)>density*12
                 val next=candidate
                 if (moved && next!=null && selected>=0 && next!=tiles[selected]) {
@@ -162,13 +171,13 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
                     else {
                         selection=selected; onChoose?.invoke(selected)
                         tiles.getOrNull(selected)?.let { tile ->
-                            if(tile.type.startsWith("clock") && tile.type!="clock_date" && e.y<height*(tile.y+1)/6f) onCorner?.invoke(e.x<width*(tile.x+tile.w/2f)/8f)
+                            if(tile.type in GridTile.CORNER_CLOCKS && e.y<height*(tile.y+1)/6f) onCorner?.invoke(e.x<width*(tile.x+tile.w/2f)/8f)
                         }; invalidate()
                     }
                 }
                 candidate=null; invalidate(); parent?.requestDisallowInterceptTouchEvent(false)
             }
-            MotionEvent.ACTION_CANCEL -> { removeCallbacks(hold);if(deleting) onPageDeleteDrag?.invoke(0f,true,true);deleting=false; onPageDrag?.invoke(e.x-downX,true,true); candidate=null; invalidate(); parent?.requestDisallowInterceptTouchEvent(false) }
+            MotionEvent.ACTION_CANCEL -> { removeCallbacks(hold);if(deleting) onPageDeleteDrag?.invoke(0f,true,true);deleting=false; onPageDrag?.invoke(pageDx(e),true,true); candidate=null; invalidate(); parent?.requestDisallowInterceptTouchEvent(false) }
         }
         return true
     }

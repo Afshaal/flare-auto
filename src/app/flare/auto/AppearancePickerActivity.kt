@@ -34,18 +34,26 @@ class AppearancePickerActivity : Activity() {
         val isTheme = mode == "theme"
         val isSaver = mode == "saver"
         val isDrawer = mode == "drawer"
+        // Wallpapers are listed in gallery order ("Custom image" last); [stored] maps a row back to its stored index.
+        val gallery = WallpaperPack.GALLERY
+        val offset = if (isDrawer) 2 else 0
+        fun stored(position: Int) = if (isDrawer && position < 2) position - 2 else gallery[position - offset]
         names = when {
             isTheme -> ThemeTokens.NAMES
-            isDrawer -> arrayOf("Theme background", "Match Home") + WallpaperPack.HOME_NAMES
-            isSaver -> WallpaperPack.SAVER_NAMES
-            else -> WallpaperPack.HOME_NAMES
+            isDrawer -> arrayOf("Theme background", "Match Home") + gallery.map { WallpaperPack.HOME_NAMES[it] }
+            else -> gallery.map { WallpaperPack.HOME_NAMES[it] }.toTypedArray()
         }
-        val selected = when {
+        val storedSelection = when {
             isTheme -> ThemeTokens.activeIndex(this)
-            isDrawer -> WallpaperPack.drawerSelection(this) + 2
+            isDrawer -> WallpaperPack.drawerSelection(this)
             else -> WallpaperPack.index(this, isSaver)
         }
-        val customPosition = if (isTheme) -1 else if (isDrawer) WallpaperPack.CUSTOM_INDEX + 2 else WallpaperPack.CUSTOM_INDEX
+        val selected = when {
+            isTheme -> storedSelection
+            isDrawer && storedSelection < 0 -> storedSelection + 2
+            else -> gallery.indexOf(storedSelection) + offset
+        }
+        val customPosition = if (isTheme) -1 else gallery.indexOf(WallpaperPack.CUSTOM_INDEX) + offset
         val root = ui.column().apply { setBackgroundColor(ui.t.background) }
         val title = when {
             isTheme -> "Theme"
@@ -64,7 +72,7 @@ class AppearancePickerActivity : Activity() {
             swatch.background = when {
                 isTheme -> ColorDrawable(ui.t.card)
                 isDrawer -> WallpaperPack.drawer(this, ui.t)
-                else -> WallpaperPack.preview(this, ui.t, isSaver, selected)
+                else -> WallpaperPack.preview(this, ui.t, isSaver, storedSelection)
             }
             current.addView(swatch, LinearLayout.LayoutParams(ui.dp(96), ui.dp(54)))
             current.addView(ui.text("Current: ${names[selected]}", 14, ui.t.textSecondary).apply {
@@ -113,12 +121,12 @@ class AppearancePickerActivity : Activity() {
                         val drawable = when (position) {
                             0 -> ColorDrawable(ui.t.background)
                             1 -> WallpaperPack.home(this@AppearancePickerActivity, ui.t)
-                            else -> WallpaperPack.previewRole(this@AppearancePickerActivity, ui.t, "drawer", position - 2)
+                            else -> WallpaperPack.previewRole(this@AppearancePickerActivity, ui.t, "drawer", stored(position))
                         }
                         preview.background = drawable ?: ColorDrawable(ui.t.background)
                     }
                     else -> preview.background =
-                        WallpaperPack.preview(this@AppearancePickerActivity, ui.t, isSaver, position)
+                        WallpaperPack.preview(this@AppearancePickerActivity, ui.t, isSaver, stored(position))
                 }
                 row.findViewById<TextView>(android.R.id.text1).text =
                     names[position] + if (position == selected) " ✓" else ""
@@ -132,8 +140,8 @@ class AppearancePickerActivity : Activity() {
             }
             when {
                 isTheme -> ThemeTokens.select(this, position)
-                isDrawer -> WallpaperPack.select(this, "drawer", position - 2)
-                else -> WallpaperPack.select(this, if (isSaver) "saver" else "home", position)
+                isDrawer -> WallpaperPack.select(this, "drawer", stored(position))
+                else -> WallpaperPack.select(this, if (isSaver) "saver" else "home", stored(position))
             }
             finish()
         }

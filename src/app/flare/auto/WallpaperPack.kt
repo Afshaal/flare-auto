@@ -40,10 +40,24 @@ internal object WallpaperPack {
         Preset.Stops("Black to Burgundy", stops(0x000000, 0x000000, 0x070506, 0x171013, 0x302126, 0x49333a)),
         Preset.Stops("Black to Copper", stops(0x000000, 0x000000, 0x080605, 0x19130f, 0x35281f, 0x503a30)),
         Preset.Stops("Black to Home Ember", stops(0x000000, 0x000000, 0x080404, 0x1c0e0d, 0x3c1d1b, 0x5b2e2a)),
-        Preset.Custom("Custom image"))
+        Preset.Custom("Custom image"),
+        // Light wallpapers for the light themes (appended after "Custom image": stored indexes never move).
+        Preset.Stops("Warm Ivory", stops(0xf6f2eb, 0xf1ece3, 0xe8e1d6)),
+        Preset.Stops("Soft Grey", stops(0xf3f4f6, 0xeaebee, 0xdfe1e5)),
+        Preset.Stops("Pearl Haze", stops(0xf4f8fa, 0xe9f0f4, 0xdce6ec)),
+        Preset.Stops("Ivory to Silver", stops(0xf7f4ee, 0xeeece8, 0xe1e3e7)))
 
     /** Index of the user's own image; its file lives in CustomImages under the role's name. */
     val CUSTOM_INDEX = PRESETS.indexOfFirst { it is Preset.Custom }
+    /**
+     * Order shown in wallpaper galleries: every preset by stored index, with "Custom image" moved to the end. Only
+     * the display order changes; galleries map a shown position back to the stored index with this list.
+     */
+    val GALLERY: List<Int> = PRESETS.indices.filter { it != CUSTOM_INDEX } + CUSTOM_INDEX
+    /** Highest stored index (presets added after "Custom image" included). */
+    private val LAST = PRESETS.lastIndex
+    /** Light wallpapers, by name (see [ThemeTokens.DEFAULT_WALLPAPERS]). */
+    fun indexOf(name: String) = PRESETS.indexOfFirst { it.name == name }
     @JvmField val HOME_NAMES: Array<String> = PRESETS.map { it.name }.toTypedArray()
     @JvmField val SAVER_NAMES = HOME_NAMES
     /** Drawer selections below 0: the theme background (-2) or "same as Home" (-1). */
@@ -88,7 +102,7 @@ internal object WallpaperPack {
 
     fun drawerSelection(context: Context): Int {
         val p = ProfileStore.preferences(context)
-        if (p.contains(Keys.WALLPAPER_DRAWER)) return p.getInt(Keys.WALLPAPER_DRAWER, DRAWER_THEME).coerceIn(DRAWER_THEME, CUSTOM_INDEX)
+        if (p.contains(Keys.WALLPAPER_DRAWER)) return p.getInt(Keys.WALLPAPER_DRAWER, DRAWER_THEME).coerceIn(DRAWER_THEME, LAST)
         return if (p.getBoolean(Keys.LEGACY_DRAWER_CUSTOM, false)) CUSTOM_INDEX
             else if (p.getBoolean(Keys.LEGACY_DRAWER_WALLPAPER, false)) DRAWER_MATCH_HOME else DRAWER_THEME
     }
@@ -106,7 +120,7 @@ internal object WallpaperPack {
     fun index(context: Context, saver: Boolean): Int {
         val prefs = ProfileStore.preferences(context)
         val key = if (saver) Keys.WALLPAPER_SAVER else Keys.WALLPAPER_HOME
-        return if (prefs.contains(key)) prefs.getInt(key, 0).coerceIn(0, CUSTOM_INDEX) else legacyIndex(prefs, saver)
+        return if (prefs.contains(key)) prefs.getInt(key, 0).coerceIn(0, LAST) else legacyIndex(prefs, saver)
     }
 
     fun name(context: Context, saver: Boolean): String = HOME_NAMES[index(context, saver)]
@@ -116,7 +130,7 @@ internal object WallpaperPack {
         previewRole(context, theme, if (saver) "saver" else "home", index)
 
     fun previewRole(context: Context, theme: ThemeTokens, role: String, index: Int): Drawable =
-        when (val preset = PRESETS[index.coerceIn(0, CUSTOM_INDEX)]) {
+        when (val preset = PRESETS[index.coerceIn(0, LAST)]) {
             is Preset.Accent -> ThemeBackdrop(theme)
             is Preset.Solid -> ColorDrawable(preset.color)
             is Preset.Glow -> GradientDrawable(

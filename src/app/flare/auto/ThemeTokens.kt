@@ -26,6 +26,14 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
             intArrayOf(0xffe1e8ec.toInt(), 0xfff2f7fa.toInt(), 0xffbecbd4.toInt(), 0xff202c34.toInt(), 0xff5e707d.toInt(), 0xff32647d.toInt())
         )
 
+        /**
+         * Home wallpaper each theme starts with when the driver explicitly picks that theme ([select]); after that a
+         * manually chosen wallpaper or accent stays until another theme is picked. Automatic light/dark switching
+         * does not call [select], so it never replaces manual choices or custom images.
+         */
+        val DEFAULT_WALLPAPERS = arrayOf("Accent wave", "Midnight", "Black to Warm Grey", "Wine", "Forest",
+            "Soft Grey", "Warm Ivory", "Pearl Haze")
+
         fun preview(p:android.content.SharedPreferences):ThemeTokens {
             val index=NAMES.indexOf(p.getString(Keys.THEME,NAMES[0])).coerceAtLeast(0)
             return ThemeTokens(VALUES[index],p.getInt(Keys.ACCENT_COLOR,VALUES[index][5]))
@@ -83,11 +91,42 @@ internal class ThemeTokens private constructor(values: IntArray, chosenAccent: I
             cached = null
         }
 
+        /** Themes the explicit Dark / Light mode buttons switch to (Burgundy Black, Cool Pearl). */
+        const val DARK_MODE_THEME = 3
+        const val LIGHT_MODE_THEME = 7
+
+        /**
+         * Explicit color-mode choice ("dark", "light", "auto"). Dark applies Burgundy Black with its default wallpaper
+         * and accent; Light applies Cool Pearl with the Accent wave wallpaper and its default accent; Automatic only
+         * switches the mode (the light/dark themes already chosen are used by time of day and never reset).
+         */
+        @JvmStatic
+        @Synchronized
+        fun chooseMode(context: Context, mode: String) {
+            val prefs = ProfileStore.preferences(context)
+            when (mode) {
+                "dark" -> select(context, DARK_MODE_THEME)
+                "light" -> {
+                    select(context, LIGHT_MODE_THEME)
+                    val wave = WallpaperPack.indexOf("Accent wave")
+                    if (wave >= 0) prefs.edit().putInt(Keys.WALLPAPER_HOME, wave).apply()
+                }
+            }
+            prefs.edit().putString(Keys.THEME_MODE, mode).apply()
+            invalidate()
+        }
+
         @JvmStatic
         @Synchronized
         fun select(context: Context, index: Int) {
+            val chosen = Math.floorMod(index, NAMES.size)
+            // An explicit theme choice brings its own Home wallpaper and accent (the theme's default accent: the
+            // stored accent is cleared). The custom image file stays; drawer and screensaver choices are untouched.
+            val wallpaper = WallpaperPack.indexOf(DEFAULT_WALLPAPERS[chosen])
             ProfileStore.preferences(context).edit()
-                .putString(Keys.THEME, NAMES[Math.floorMod(index, NAMES.size)])
+                .apply { if (wallpaper >= 0) putInt(Keys.WALLPAPER_HOME, wallpaper) }
+                .remove(Keys.ACCENT_COLOR)
+                .putString(Keys.THEME, NAMES[chosen])
                 .putInt(if (index >= 5) "light_theme_index" else "dark_theme_index", index)
                 .putString(Keys.THEME_MODE, if (mode(context) == "auto") "auto" else if (index >= 5) "light" else "dark")
                 .apply()

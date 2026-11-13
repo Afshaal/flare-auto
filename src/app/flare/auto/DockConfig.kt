@@ -15,15 +15,25 @@ internal enum class DockAction(val id: Int, val label: String, val glyph: String
     /** The permanent app-drawer slot: always visible, exactly one. */
     APPS(4, "Apps", "apps"),
     /** A user-chosen application; [DockConfig.Item.target] holds its component. */
-    APP(5, "Application", "");
+    APP(5, "Application", ""),
+    /** Flare Auto's own full navigation map. */
+    NAVIGATION(6, "Navigation", "navigation"),
+    /**
+     * Projection shortcuts with the Home widget's marks. [DockConfig.Item.target] may link a compatible installed app
+     * (DiPlay, DiAuto, ZLink...); empty uses the same app the Home widget's button opens.
+     */
+    CARPLAY(7, "CarPlay", "carplay"),
+    ANDROID_AUTO(8, "Android Auto", "androidauto");
 
     val builtIn get() = this != APP
+    /** Actions that can be linked to an installed app while keeping their own icon and name. */
+    val linkable get() = this == CARPLAY || this == ANDROID_AUTO
 
     companion object {
         private val byId = values().associateBy { it.id }
         fun of(id: Int): DockAction? = byId[id]
         /** Built-in actions a slot can be switched to (the drawer slot is permanent). */
-        val ASSIGNABLE = listOf(AUDIO, RADIO, BLUETOOTH, SCREEN_OFF)
+        val ASSIGNABLE = listOf(AUDIO, RADIO, BLUETOOTH, SCREEN_OFF, NAVIGATION, CARPLAY, ANDROID_AUTO)
     }
 }
 
@@ -31,6 +41,17 @@ internal object DockConfig {
     const val KEY = Keys.DOCK_ITEMS
     /** Icon sizes (dp) offered as small / medium / large. */
     val ICON_SIZES = intArrayOf(20, 26, 32)
+    /** Most shortcuts shown in the dock (the app-drawer slot included). Older builds skip actions they do not know. */
+    const val MAX_ITEMS = 6
+    /** Shortcuts a left or right (side) dock shows, besides its Apps button. */
+    const val SIDE_SHORTCUTS = 3
+
+    /**
+     * Stored indexes of the shortcuts a side dock shows: the first [SIDE_SHORTCUTS] visible items other than Apps.
+     * Later items stay saved (and shown by the bottom dock); nothing is removed.
+     */
+    fun sideShortcuts(items: List<Item>): List<Int> =
+        items.indices.filter { items[it].visible && items[it].action != DockAction.APPS }.take(SIDE_SHORTCUTS)
 
     class Item(var action: DockAction, var target: String, var visible: Boolean)
 

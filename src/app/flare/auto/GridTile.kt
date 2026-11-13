@@ -1,7 +1,11 @@
 package app.flare.auto
 
-internal data class GridTile(val type:String,val x:Int,val y:Int,val w:Int,val h:Int) {
-    val minWidth get()=if((type=="apps" || type=="clock_only" || type=="clock_minimal" || HostedWidgets.id(type)!=null)) 2 else 3
+/**
+ * One Home card. [style]: the clock style of a clock card chosen in the widget gallery ([ClockStyles] id); null
+ * (cards saved before per-widget styles, and every non-clock card) uses the Home clock style preference.
+ */
+internal data class GridTile(val type:String,val x:Int,val y:Int,val w:Int,val h:Int,val style:String?=null) {
+    val minWidth get()=if((type=="apps" || type=="clock_only" || type=="clock_minimal" || type=="weather_compact" || HostedWidgets.id(type)!=null)) 2 else 3
     val minHeight get()=if((type=="clock" || type=="media" || type=="media_wide" || type=="media_album")) 3 else 2
     fun overlaps(other:GridTile)=x<other.x+other.w && x+w>other.x && y<other.y+other.h && y+h>other.y
     fun valid()=(type in TYPES || HostedWidgets.id(type)!=null) && x>=0 && y>=0 && w>=minWidth && h>=minHeight && x+w<=8 && y+h<=6
@@ -21,7 +25,11 @@ internal data class GridTile(val type:String,val x:Int,val y:Int,val w:Int,val h
     }
     companion object {
         val TYPES=listOf("clock","clock_only","clock_minimal","media","media_wide","media_compact","projection","apps","weather","weather_solar","offline_map",
-            "clock_date","media_album")
+            "clock_date","media_album","clock_gauge","clock_weather","clock_split","weather_compact","weather_wide")
+        /** Clock cards with the tappable weather / trim corners. */
+        val CORNER_CLOCKS=setOf("clock","clock_only","clock_minimal")
+        /** Clock cards showing the vehicle name / trim badge. */
+        val BRANDED_CLOCKS=setOf("clock","clock_only","clock_gauge","clock_split")
         fun validPage(tiles:List<GridTile>)=tiles.all { it.valid() } && tiles.map { if(it.type.startsWith("media")) "media" else it.type }.distinct().size==tiles.size &&
             tiles.indices.all { i -> (i+1 until tiles.size).none { j -> tiles[i].overlaps(tiles[j]) } }
     }

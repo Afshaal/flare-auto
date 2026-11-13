@@ -6,6 +6,9 @@ internal object WidgetCatalog {
         Style("clock_only","Classic clock","Clocks",listOf(3 to 3,4 to 3,4 to 6)),
         Style("clock_minimal","Minimal clock","Clocks",listOf(2 to 2,4 to 3,8 to 6)),
         Style("clock_date","Clock with date","Clocks",listOf(3 to 2,4 to 3,8 to 6)),
+        Style("clock_gauge","Gauge clock","Clocks",listOf(4 to 3,5 to 3,8 to 3)),
+        Style("clock_weather","Clock with weather","Clocks",listOf(4 to 3,5 to 3,8 to 3)),
+        Style("clock_split","Split clock","Clocks",listOf(4 to 3,5 to 3,8 to 3)),
         Style("media","Artwork player","Media",listOf(4 to 6,4 to 3,8 to 6)),
         Style("media_wide","Wide player","Media",listOf(4 to 3,8 to 3,8 to 4)),
         Style("media_compact","Compact player","Media",listOf(3 to 2,4 to 2,8 to 2)),
@@ -14,7 +17,9 @@ internal object WidgetCatalog {
         Style("offline_map","Offline map","Maps",listOf(5 to 6,8 to 4,4 to 3)),
         Style("apps","Application shortcuts","Applications",listOf(2 to 2,4 to 3,8 to 3)),
         Style("weather","Weather","Weather",listOf(3 to 2,4 to 3,4 to 6)),
-        Style("weather_solar","Weather & solar times","Weather",listOf(3 to 3,4 to 3,4 to 6)))
+        Style("weather_solar","Weather & solar times","Weather",listOf(3 to 3,4 to 3,4 to 6)),
+        Style("weather_compact","Compact weather","Weather",listOf(2 to 2,3 to 2,3 to 3)),
+        Style("weather_wide","Wide weather","Weather",listOf(4 to 2,5 to 2,8 to 2)))
     fun fit(page:List<GridTile>,type:String,w:Int,h:Int):GridTile? {
         val tile=GridTile(type,0,0,w,h)
         if(!tile.valid() || page.any { it.type==type }) return null

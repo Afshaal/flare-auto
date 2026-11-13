@@ -44,11 +44,20 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
             group.getChildAt(group.indexOfChild(row)-1)?.takeIf { it.tag==UiKit.Role.DIVIDER }?.visibility=state
         }
         row("Navigation pack",{ packValue() }) { choosePack() }
+        // A pack ZIP from Downloads or USB, extracted and verified in the app (PackImport).
+        row("Import navigation pack",{ PackImport.status.ifBlank { "ZIP from Downloads or USB" } }) { importPack() }
         row("Map renderer",{ rendererValue() }) { chooseRenderer() }
         // MapLibre · 3D only.
         val orientation=row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up 3D" else "North-up" }) {
             ThemedDialogs.Builder(a).setTitle("Map orientation while following GPS").setItems(arrayOf("Heading-up 3D","North-up")) { _,i->
                 p.edit().putBoolean(Keys.OFFLINE_MAP_HEADING_UP,i==0).apply();refresh() }.show()
+        }
+        // MapLibre look: follow the launcher's light/dark theme, or always dark / light. Changing it reloads the map
+        // (route, position and 3D buildings are put back by the map as on any reload).
+        val appearance=row("Map appearance",{ MapAppearance.CHOICES[MapAppearance.index(a)] }) {
+            ThemedDialogs.Builder(a).setTitle("Map appearance").setSingleChoiceItems(MapAppearance.CHOICES,MapAppearance.index(a)) { d,i->
+                d.dismiss();MapAppearance.set(a,i);OfflineMapStore.touch(a);refresh()
+            }.setNegativeButton("Cancel",null).show()
         }
         // A switch like the other on/off settings (default off); dimmed when the pack has no building heights.
         fun hasBuildings()=(pack as? NavigationPack.Status.Ready)?.pack?.vector?.buildings!=null
@@ -67,7 +76,7 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
         }
         // Mapsforge · 2D only: map files outside the navigation pack.
         val otherRegions=row("Other regions",{ regionValue() }) { regions() }
-        refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(buildings,vector);visible(otherRegions,!vector) }
+        refreshers.add { val vector=vectorInUse();visible(orientation,vector);visible(appearance,vector);visible(buildings,vector);visible(otherRegions,!vector) }
         // Shared by both renderers.
         toggle("Follow GPS position",Keys.OFFLINE_MAP_FOLLOW)
         row("Map center",{ if(p.getString(Keys.OFFLINE_MAP_LAT,"").isNullOrEmpty()) "Automatic" else "Custom" }) {
@@ -99,54 +108,74 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
             p.edit().putBoolean(Keys.OFFLINE_ETA_TRAFFIC,!s().enabled).apply();refresh()
         })
         ui.add(group,traffic)
-        val note=ui.text("Adds the delay you set to arrival estimates: Wapda Town to Barkat Market (morning and evening) and " +
-            "Jail Road (school dismissal), for trips over 5 km (full from 10 km). Approximate and user-configured; " +
-            "not live traffic, and routes are not changed.",13,ui.t.textSecondary).apply { setPadding(ui.dp(16),ui.dp(8),ui.dp(16),ui.dp(10)) }
-        ui.add(group,note)
-        val peak=row("Peak delay multiplier",{ "%.1f×".format(java.util.Locale.US,s().peak) }) {
-            val choices=TrafficEta.PEAK_CHOICES
-            ThemedDialogs.Builder(a).setTitle("Peak delay multiplier")
-                .setSingleChoiceItems(choices.map { "%.1f×".format(java.util.Locale.US,it) }.toTypedArray(),choices.indexOfFirst { abs(it-s().peak)<.01 }) { d,i->
-                    p.edit().putInt(Keys.OFFLINE_ETA_PEAK,(choices[i]*10).roundToInt()).apply();d.dismiss();refresh()
-                }.setNegativeButton("Cancel",null).show()
-        }
-        val morning=row("Morning peak",{ s().morning.label }) { editWindow("Morning peak",Keys.OFFLINE_ETA_MORNING,s().morning) }
-        val evening=row("Evening peak",{ s().evening.label }) { editWindow("Evening peak",Keys.OFFLINE_ETA_EVENING,s().evening) }
-        val school=ui.toggle("School dismissal (Jail Road)",s().schoolEnabled,Runnable {
-            p.edit().putBoolean(Keys.OFFLINE_ETA_SCHOOL,!s().schoolEnabled).apply();refresh()
-        })
-        ui.add(group,school)
-        val schoolTime=row("School dismissal time",{ s().school.label }) { editWindow("School dismissal",Keys.OFFLINE_ETA_SCHOOL_TIME,s().school) }
-        val days=row("Days",{ dayLabel(s().days) }) { chooseDays() }
+        // The details live in their own panel; switching the adjustment on does not unfold them here.
+        val advanced=row("Advanced settings",{ trafficSummary(s()) }) { trafficPanel() }
         refreshers.add {
             val st=s()
-            traffic.setChecked(st.enabled,"Typical traffic adjustment");school.setChecked(st.schoolEnabled,"School dismissal")
-            listOf(note,peak,morning,evening,school,days).forEach { visible(it,st.enabled) }
-            visible(schoolTime,st.enabled && st.schoolEnabled)
+            traffic.setChecked(st.enabled,"Typical traffic adjustment")
+            advanced.alpha=if(st.enabled) 1f else .6f
         }
     }
 
-    private fun editWindow(title:String,key:String,current:TrafficEta.Window) {
+    /** "2.0× · Mon–Fri · school on" (the configuration in one line). */
+    private fun trafficSummary(s:TrafficEta.Settings)=
+        "%.1f× · %s · school %s".format(java.util.Locale.US,s.peak,dayLabel(s.days,short=true),if(s.schoolEnabled) "on" else "off")
+
+    /** Typical traffic adjustment details: explanation, multiplier, schedules, school dismissal and days. */
+    private fun trafficPanel() {
+        fun s()=TrafficEta.read(p)
+        val box=ui.group()
+        val scroll=android.widget.ScrollView(a).apply { addView(box) }
+        lateinit var fill:()->Unit
+        fun row(name:String,value:String,action:()->Unit) { ui.add(box,ui.valueRow(name,value,Runnable(action))) }
+        fun changed() { fill();refresh() }
+        fill={
+            box.removeAllViews()
+            val st=s()
+            ui.add(box,ui.text("Adds the delay you set to arrival estimates: Wapda Town to Barkat Market (morning and evening) and " +
+                "Jail Road (school dismissal), for trips over 5 km (full from 10 km). Approximate and user-configured; " +
+                "not live traffic, and routes are not changed." + (if(st.enabled) "" else " The adjustment is off."),
+                13,ui.t.textSecondary).apply { setPadding(ui.dp(16),ui.dp(10),ui.dp(16),ui.dp(10)) })
+            row("Peak delay multiplier","%.1f×".format(java.util.Locale.US,st.peak)) {
+                val choices=TrafficEta.PEAK_CHOICES
+                ThemedDialogs.Builder(a).setTitle("Peak delay multiplier")
+                    .setSingleChoiceItems(choices.map { "%.1f×".format(java.util.Locale.US,it) }.toTypedArray(),choices.indexOfFirst { abs(it-s().peak)<.01 }) { d,i->
+                        p.edit().putInt(Keys.OFFLINE_ETA_PEAK,(choices[i]*10).roundToInt()).apply();d.dismiss();changed()
+                    }.setNegativeButton("Cancel",null).show()
+            }
+            row("Morning peak",st.morning.label) { editWindow("Morning peak",Keys.OFFLINE_ETA_MORNING,s().morning) { changed() } }
+            row("Evening peak",st.evening.label) { editWindow("Evening peak",Keys.OFFLINE_ETA_EVENING,s().evening) { changed() } }
+            ui.add(box,ui.toggle("School dismissal (Jail Road)",st.schoolEnabled,Runnable {
+                p.edit().putBoolean(Keys.OFFLINE_ETA_SCHOOL,!s().schoolEnabled).apply();changed()
+            }))
+            if(st.schoolEnabled) row("School dismissal time",st.school.label) { editWindow("School dismissal",Keys.OFFLINE_ETA_SCHOOL_TIME,s().school) { changed() } }
+            row("Days",dayLabel(st.days)) { chooseDays { changed() } }
+        }
+        fill()
+        ThemedDialogs.Builder(a).setTitle("Typical traffic adjustment").setView(scroll).setPositiveButton("Done",null).show()
+    }
+
+    private fun editWindow(title:String,key:String,current:TrafficEta.Window,done:()->Unit={}) {
         val input=EditText(a).apply { setSingleLine();hint="07:30-09:30";setText(current.stored);setTextColor(ui.t.textPrimary) }
         ThemedDialogs.Builder(a).setTitle(title).setMessage("Start and end time, 24-hour (for example 07:30-09:30).").setView(input)
             .setPositiveButton("Save") { _,_->
                 val w=TrafficEta.Window.parse(input.text.toString())
                 if(w==null) Toast.makeText(a,"Enter a time range such as 07:30-09:30",Toast.LENGTH_SHORT).show()
-                else { p.edit().putString(key,w.stored).apply();refresh() }
+                else { p.edit().putString(key,w.stored).apply();refresh();done() }
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun chooseDays() {
+    private fun chooseDays(done:()->Unit={}) {
         val names=arrayOf("Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday")
         val checked=BooleanArray(7) { TrafficEta.read(p).days and (1 shl it)!=0 }
         ThemedDialogs.Builder(a).setTitle("Days with these delays").setMultiChoiceItems(names,checked) { _,i,on-> checked[i]=on }
             .setPositiveButton("Save") { _,_->
-                p.edit().putInt(Keys.OFFLINE_ETA_DAYS,(0 until 7).filter { checked[it] }.fold(0) { m,i-> m or (1 shl i) }).apply();refresh()
+                p.edit().putInt(Keys.OFFLINE_ETA_DAYS,(0 until 7).filter { checked[it] }.fold(0) { m,i-> m or (1 shl i) }).apply();refresh();done()
             }.setNegativeButton("Cancel",null).show()
     }
 
-    private fun dayLabel(days:Int):String = when(days) {
-        TrafficEta.WEEKDAYS -> "Monday–Friday"
+    private fun dayLabel(days:Int,short:Boolean=false):String = when(days) {
+        TrafficEta.WEEKDAYS -> if(short) "Mon–Fri" else "Monday–Friday"
         0b1111111 -> "Every day"
         0 -> "None"
         else -> listOf("Mon","Tue","Wed","Thu","Fri","Sat","Sun").filterIndexed { i,_-> days and (1 shl i)!=0 }.joinToString(", ")
@@ -269,18 +298,41 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
     }
     private fun refresh() { refreshers.forEach { it() } }
     fun resume() {
-        OfflineMapStore.add(this);refresh();checkPack()
+        OfflineMapStore.add(this);PackImport.add(this);refresh();checkPack()
+    }
+    private fun importPack() {
+        if(PackImport.busy) {
+            ThemedDialogs.Builder(a).setTitle("Importing navigation pack").setMessage(PackImport.status)
+                .setPositiveButton("Cancel import") { _,_->PackImport.cancel() }.setNegativeButton("Close",null).show()
+            return
+        }
+        ThemedDialogs.Builder(a).setTitle("Import navigation pack")
+            .setMessage("Choose a navigation pack ZIP (for example from Downloads or a USB drive). It is extracted and checked " +
+                "here; a pack with the same region replaces the installed one only after every file is verified.")
+            .setPositiveButton("Choose ZIP") { _,_->
+                try {
+                    a.startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("*/*")
+                        .putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("application/zip","application/x-zip-compressed","application/octet-stream")),PICK_PACK)
+                } catch(_:android.content.ActivityNotFoundException) { Toast.makeText(a,"No file picker is available",Toast.LENGTH_LONG).show() }
+            }.setNegativeButton("Cancel",null).show()
+    }
+    /** Result of [PackImport] (on the main thread): reload the pack list and selection, and say what happened. */
+    fun packImportDone(ok:Boolean,message:String) {
+        pack=null;refresh();checkPack()
+        if(!a.isDestroyed) ThemedDialogs.Builder(a).setTitle(if(ok) "Navigation pack imported" else "Import failed")
+            .setMessage(message.removePrefix("Import failed: ")).setPositiveButton("Close",null).show()
     }
     /** Lists installed packs, then verifies the selected one (checksums the first time: slow for a large pack). */
     private fun checkPack() {
         OfflineRouting.worker.execute {
+            PackImport.recover(a) // leftovers of an import interrupted by a restart
             val installed=NavigationPack.installed(a).map { it to NavigationPack.read(it) }
             a.runOnUiThread { if(!a.isDestroyed) { packs=installed;refresh() } }
             val status=NavigationPack.verified(a)
             a.runOnUiThread { if(!a.isDestroyed) { pack=status;refresh() } }
         }
     }
-    fun pause() { OfflineMapStore.remove(this) }
+    fun pause() { OfflineMapStore.remove(this);PackImport.remove(this) }
     override fun mapStatusChanged()=refresh()
-    companion object { const val PICK_MAP=734; private const val REQUEST_LOCATION=733 }
+    companion object { const val PICK_MAP=734; const val PICK_PACK=735; private const val REQUEST_LOCATION=733 }
 }

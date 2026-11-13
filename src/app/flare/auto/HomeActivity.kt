@@ -49,7 +49,8 @@ class HomeActivity : Activity() {
     private var attachedScale = 100
     private var mapRevision = 0L
     private lateinit var root: LinearLayout
-    private lateinit var date: TextView
+    /** Top bar date; null with a side dock, which has no top bar (its clock is in the dock). */
+    private var date: TextView? = null
     private lateinit var startup: StartupActions
     private val handler = Handler(Looper.getMainLooper())
     private val dateFormat = SimpleDateFormat("EEE, MMM d", Locale.getDefault())
@@ -75,10 +76,10 @@ class HomeActivity : Activity() {
     private val tick = object : Runnable {
         override fun run() {
             if (theme !== ThemeTokens.get(this@HomeActivity)) build()
-            date.text = dateFormat.format(Date())
+            date?.text = dateFormat.format(Date())
             environment?.let {
                 it.updateSolar()
-                dimOverlay?.visibility = if (prefs.getBoolean(Keys.AUTO_DIM, false) && it.night()) View.VISIBLE else View.GONE
+                applyDim()
             }
             val environments = cards.environments
             for (index in 1 until environments.size) environments[index].updateSolar()
@@ -86,10 +87,19 @@ class HomeActivity : Activity() {
         }
     }
 
+    /** Night auto-dim over Home, from the live page's environment card. */
+    private fun applyDim() {
+        val night = environment?.night() ?: return
+        dimOverlay?.visibility = if (prefs.getBoolean(Keys.AUTO_DIM, false) && night) View.VISIBLE else View.GONE
+    }
+
+    /** A Home page swipe is in progress (see [CardPages.onDragging]). */
+    private var swiping = false
+
     private val progressTick = object : Runnable {
         override fun run() {
             if (!resumed || playbackButton == null) return
-            updateProgress()
+            if (!swiping) updateProgress()
             if (isPlaying(selectedController) && lastDuration > 0) handler.postDelayed(this, 1000)
         }
     }
@@ -198,7 +208,26 @@ class HomeActivity : Activity() {
         val spacing = dp(prefs.getInt(Keys.SPACING, 14))
         root.setPadding(spacing, dp(10), spacing, dp(10))
         val frame = FrameLayout(this)
-        frame.addView(root)
+        val side = HomeChrome.dockSide(prefs)
+        if (side == "bottom") frame.addView(root)
+        else {
+            // Side dock: a detached rounded panel over the wallpaper, no top bar; the cards and map fill the rest with
+            // the same small margin on every side.
+            val gap = dp(SIDE_GAP)
+            val shell = row()
+            shell.background = root.background
+            shell.setPadding(gap, gap, gap, gap)
+            root.background = null
+            root.setPadding(0, 0, 0, 0)
+            val bar = HomeChrome.sideDock(this, prefs, theme, resources.displayMetrics.heightPixels - 2 * gap - 2 * dp(4)) { _, item -> dockClick(item) }.bar
+            val width = dp(prefs.getInt(Keys.DOCK, 70))
+            // The cards sit inside the page grid's own 4 dp inset; the dock gets the same inset so their edges line up.
+            val inset = dp(4)
+            if (side == "left") shell.addView(bar, LinearLayout.LayoutParams(width, MATCH).apply { setMargins(inset, inset, gap, inset) })
+            shell.addView(root, LinearLayout.LayoutParams(0, MATCH, 1f))
+            if (side == "right") shell.addView(bar, LinearLayout.LayoutParams(width, MATCH).apply { setMargins(gap, inset, inset, inset) })
+            frame.addView(shell)
+        }
         dimOverlay = View(this).apply {
             setBackgroundColor(DIM_COLOR)
             isClickable = false
@@ -206,15 +235,18 @@ class HomeActivity : Activity() {
         }
         frame.addView(dimOverlay, FrameLayout.LayoutParams(MATCH, MATCH))
         setContentView(frame)
-        buildTopBar()
+        date = null
+        if (side == "bottom") buildTopBar()
         val content = row()
         root.addView(content, LinearLayout.LayoutParams(MATCH, 0, 1f).apply {
-            topMargin = dp(12)
-            bottomMargin = dp(12)
+            if (side == "bottom") { topMargin = dp(12); bottomMargin = dp(12) }
         })
         buildColumns(content)
         if (resumed) cards.environments.forEach { it.start() }
-        buildDock()
+        // A rebuild (for example after a page swipe) shows the date and night dim at once, not at the next minute tick.
+        date?.text = dateFormat.format(Date())
+        applyDim()
+        if (side == "bottom") buildDock()
         if (resumed) refreshPlayback()
     }
 
@@ -240,13 +272,15 @@ class HomeActivity : Activity() {
                 val renderer = if (active) cards else HomeCards(this, prefs, theme, preview = true)
                 pages[index].forEach { tile ->
                     val cell = row()
-                    if (active) buildCard(cell, tile.type, tile.h < 5) else renderer.build(cell, tile.type, tile.h < 5)
+                    if (active) buildCard(cell, tile.type, tile.h < 5, style = tile.style) else renderer.build(cell, tile.type, tile.h < 5, style = tile.style)
                     board.addView(CardFrame(this, cell, tile.type))
                 }
-                if (!active) mirrorMedia(renderer)
+                if (!active) { mirrorMedia(renderer); renderer.maps.forEach { it.hold = true } } // started after the swipe commits
                 host.connect(board)
                 board
-            }, { next -> currentPage = next; build() })
+            }, { next -> currentPage = next; swiping = false; build() })
+            // While a swipe is held, the live page's map and progress bar stop redrawing under the moving page.
+            strip.onDragging = { on -> swiping = on; cards.maps.forEach { it.swiping(on) }; if (!on) updateProgress() }
             content.addView(strip, LinearLayout.LayoutParams(MATCH, MATCH))
             return
         }
@@ -273,8 +307,8 @@ class HomeActivity : Activity() {
         renderer.playbackButton?.setImageDrawable(MediaGlyph(if (isPlaying(selectedController)) "pause" else "play", theme.textPrimary))
     }
 
-    private fun buildCard(content: LinearLayout, card: String, compact: Boolean = false, weight: Float = 1f) {
-        cards.build(content, card, compact, weight)
+    private fun buildCard(content: LinearLayout, card: String, compact: Boolean = false, weight: Float = 1f, style: String? = null) {
+        cards.build(content, card, compact, weight, style)
         environment = cards.environments.getOrNull(0)
         playbackButton = cards.playbackButton
         sourceLabel = cards.sourceLabel
@@ -289,16 +323,22 @@ class HomeActivity : Activity() {
     }
 
     private fun buildDock() {
-        root.addView(HomeChrome.dock(this, prefs, theme) { _, item ->
-            when (item.action) {
-                DockAction.AUDIO -> launchScreen(KnownApps.AUDIO_SCREEN)
-                DockAction.RADIO -> launchScreen(KnownApps.RADIO_SCREEN)
-                DockAction.BLUETOOTH -> launchScreen(KnownApps.PHONE_SCREEN)
-                DockAction.SCREEN_OFF -> startActivity(Intent(this, ScreenSaverActivity::class.java))
-                DockAction.APPS -> startActivity(Intent(this, AppsActivity::class.java))
-                DockAction.APP -> launchTarget(item.target)
-            }
-        }, LinearLayout.LayoutParams(MATCH, dp(prefs.getInt(Keys.DOCK, 70))))
+        root.addView(HomeChrome.dock(this, prefs, theme) { _, item -> dockClick(item) },
+            LinearLayout.LayoutParams(MATCH, dp(prefs.getInt(Keys.DOCK, 70))))
+    }
+
+    private fun dockClick(item: DockConfig.Item) {
+        when (item.action) {
+            DockAction.AUDIO -> launchScreen(KnownApps.AUDIO_SCREEN)
+            DockAction.RADIO -> launchScreen(KnownApps.RADIO_SCREEN)
+            DockAction.BLUETOOTH -> launchScreen(KnownApps.PHONE_SCREEN)
+            DockAction.SCREEN_OFF -> startActivity(Intent(this, ScreenSaverActivity::class.java))
+            DockAction.APPS -> startActivity(Intent(this, AppsActivity::class.java))
+            DockAction.APP -> launchTarget(item.target)
+            DockAction.NAVIGATION -> startActivity(Intent(this, OfflineMapActivity::class.java))
+            DockAction.CARPLAY -> if (item.target.isNotEmpty()) launchTarget(item.target) else launchFirst(KnownApps.CARPLAY)
+            DockAction.ANDROID_AUTO -> if (item.target.isNotEmpty()) launchTarget(item.target) else launchFirst(KnownApps.ANDROID_AUTO)
+        }
     }
 
     // ---- media card -------------------------------------------------------------------------------------------
@@ -588,6 +628,8 @@ class HomeActivity : Activity() {
     companion object {
         private const val STATE_PAGE = "dashboard_page"
         private const val NO_MEDIA = "No media playing"
+        /** Margin (dp) around a side dock and between it and the cards. */
+        private const val SIDE_GAP = 10
         private const val DIM_COLOR = 0x4d000000
         @Volatile private var rebuildRequests = 0
 

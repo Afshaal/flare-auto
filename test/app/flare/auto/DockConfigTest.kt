@@ -9,10 +9,12 @@ class DockConfigTest {
 
     @Test
     fun storedIdsAreStable() {
-        assertEquals(listOf(0, 1, 2, 3, 4, 5), DockAction.values().map { it.id })
+        // 6-8 (Navigation, CarPlay, Android Auto) were added later; 0-5 never change.
+        assertEquals(listOf(0, 1, 2, 3, 4, 5, 6, 7, 8), DockAction.values().map { it.id })
         assertEquals(DockAction.APP, DockAction.of(5))
         assertEquals(null, DockAction.of(9))
-        assertEquals(listOf(DockAction.AUDIO, DockAction.RADIO, DockAction.BLUETOOTH, DockAction.SCREEN_OFF), DockAction.ASSIGNABLE)
+        assertEquals(listOf(DockAction.AUDIO, DockAction.RADIO, DockAction.BLUETOOTH, DockAction.SCREEN_OFF,
+            DockAction.NAVIGATION, DockAction.CARPLAY, DockAction.ANDROID_AUTO), DockAction.ASSIGNABLE)
     }
 
     @Test

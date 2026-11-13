@@ -8,7 +8,10 @@ internal object DashboardPages {
         val all = JSONArray()
         pages.forEach { page ->
             val rows = JSONArray()
-            page.forEach { rows.put(JSONObject().put("type", it.type).put("x", it.x).put("y", it.y).put("w", it.w).put("h", it.h)) }
+            page.forEach { t ->
+                // "style" is optional (older builds ignore it and use the Home clock style).
+                rows.put(JSONObject().put("type", t.type).put("x", t.x).put("y", t.y).put("w", t.w).put("h", t.h).apply { t.style?.let { put("style", it) } })
+            }
             all.put(rows)
         }
         return all.toString()
@@ -21,7 +24,8 @@ internal object DashboardPages {
             require(rows.length() <= 8)
             MutableList(rows.length()) { j ->
                 val t = rows.getJSONObject(j)
-                GridTile(t.getString("type"), t.getInt("x"), t.getInt("y"), t.getInt("w"), t.getInt("h"))
+                GridTile(t.getString("type"), t.getInt("x"), t.getInt("y"), t.getInt("w"), t.getInt("h"),
+                    t.optString("style", "").takeIf { it in ClockStyles.ids })
             }.also { require(GridTile.validPage(it)) }
         }
     } catch (_: Exception) { null }

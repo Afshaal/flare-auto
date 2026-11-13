@@ -92,6 +92,23 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     private var lastCenter=LatLong(0.0,0.0)
     private var manager:LocationManager?=null
     private val label=TextView(c).apply { gravity=Gravity.CENTER;setTextColor(t.textSecondary);textSize=15f }
+    /**
+     * Home widget only: the last map frame any Home map card drew, shown while this card's own map loads. A page that
+     * is swiped in, and the live page Home rebuilds when the swipe commits, then show the map instead of a blank
+     * "Loading" card that flashes to the map a moment later.
+     */
+    private val still=android.widget.ImageView(c).apply { scaleType=android.widget.ImageView.ScaleType.CENTER_CROP }
+    private val homeWidget get()=preview && !sample && a !is OfflineMapActivity
+    private fun showStill() {
+        val frame=lastFrame
+        if(!homeWidget || frame==null || frame.isRecycled || !p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)) return
+        still.setImageBitmap(frame)
+        if(still.parent==null) addView(still,LayoutParams(MATCH,MATCH))
+        label.visibility=View.GONE
+    }
+    private fun hideStill() { if(still.parent!=null) removeView(still);still.setImageDrawable(null) }
+    /** Keeps this card's current map frame for the next Home card that loads. */
+    private fun remember() { if(homeWidget) vectorMap?.snapshot()?.let { lastFrame=it } }
     private val main=android.os.Handler(android.os.Looper.getMainLooper())
     private val density=resources.displayMetrics.density
     init {
@@ -101,6 +118,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         clipToOutline=true;outlineProvider=object:android.view.ViewOutlineProvider() { override fun getOutline(v:View,o:android.graphics.Outline) { o.setRoundRect(0,0,v.width,v.height,radius) } }
         addView(label,LayoutParams(MATCH,MATCH))
         label.text=if(sample) "Offline map\nLocal vector map + GPS" else if(!p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)) "Offline maps disabled\nEnable in Launcher settings" else "Loading offline map…"
+        showStill()
         label.setOnClickListener {
             if(!sample) {
                 if(!p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)) a.startActivity(Intent(a,SettingsActivity::class.java).putExtra(SettingsActivity.EXTRA_CATEGORY,SettingsActivity.OFFLINE_MAPS))
@@ -108,10 +126,17 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             }
         }
     }
+    /**
+     * True on a Home page that is only being swiped in: the map does not start there (Home rebuilds the page once the
+     * swipe commits), so no MapLibre instance or GPS request starts in the middle of the swipe.
+     */
+    var hold=false
+    /** Home page swipe in progress: the 3D map keeps the latest fix and draws it when the swipe ends. */
+    fun swiping(on:Boolean) { if(on) remember();vectorMap?.paused=on }
     override fun onAttachedToWindow() { super.onAttachedToWindow();start() }
     override fun onDetachedFromWindow() { stop();super.onDetachedFromWindow() }
     fun start() {
-        if(started || sample || !isAttachedToWindow || !p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)) return
+        if(started || hold || sample || !isAttachedToWindow || !p.getBoolean(Keys.OFFLINE_MAP_ENABLED,false)) return
         started=true;val token=++generation
         initMapsforge()
         val app=a.applicationContext
@@ -141,7 +166,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         try {
             val file=OfflineMapStore.ensure(app);val source=MapFile(file);val overview=file.name=="world.map"
             main.post { if(!started || generation!=token) source.close() else { fallbackReason=reason;open(source,overview) } }
-        } catch(e:Exception) { main.post { if(started && generation==token) label.text="Map unavailable\n${e.message.orEmpty()}" } }
+        } catch(e:Exception) { main.post { if(started && generation==token) { hideStill();label.visibility=View.VISIBLE;label.text="Map unavailable\n${e.message.orEmpty()}" } } }
     }
     private fun savedCenter(fallbackLat:Double,fallbackLon:Double):Pair<Double,Double> {
         // Following GPS: open where the car last was, so the map does not sweep across the region to the first fix.
@@ -181,6 +206,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         view.showRoute(route);ahead?.let { view.showRemaining(it) };view.showAlternatives(alternatives.map { it.points })
         overviewRoutes?.let { routes -> view.post { if(vectorMap===view) fitOverview(routes) } }
         addView(view,0,LayoutParams(MATCH,MATCH));label.visibility=View.GONE
+        // The cached frame stays on top until this map has drawn its own.
+        if(still.parent!=null) view.onRendered={ if(vectorMap===view) hideStill() }
         addCredit("",if(inside) null else "Map center is outside the saved coverage")
         if(!preview) addButtons(true)
         addPreviewOverlay()
@@ -189,7 +216,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     /** Replaces a failed vector map by the Mapsforge renderer, keeping the reason visible. */
     private fun fallBack(reason:String) {
         val token=generation
-        vectorMap?.destroy();vectorMap=null;vectorBox=null
+        vectorMap?.destroy();vectorMap=null;vectorBox=null;hideStill()
         removeAllViews();addView(label,LayoutParams(MATCH,MATCH));label.visibility=View.VISIBLE;label.text="Loading offline map…"
         try { manager?.removeUpdates(this) } catch(_:RuntimeException) { };manager=null
         val app=a.applicationContext
@@ -233,7 +260,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
                 view.setZoomLevel(z.toByte())
             } }
             view.addInputListener(object:org.mapsforge.map.view.InputListener { override fun onMoveEvent() { follow=false };override fun onZoomEvent()=Unit })
-            addView(view,0,LayoutParams(MATCH,MATCH));label.visibility=View.GONE
+            addView(view,0,LayoutParams(MATCH,MATCH));label.visibility=View.GONE;hideStill()
             val base=if(overview) "World overview, no street detail" else ""
             addCredit(listOfNotNull(base.ifEmpty { null },fallbackReason).joinToString(" · "),if(bounds!!.contains(requested)) null else "Map center is outside the saved coverage")
             if(!preview) addButtons(false)
@@ -246,7 +273,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             }.also { streetLabel=it },LayoutParams(WRAP,WRAP,Gravity.CENTER).apply { topMargin=(30*density).toInt() })
             overviewRoutes?.let { routes -> view.post { if(map===view) fitOverview(routes) } }
             startGps(false)
-        } catch(e:Exception) { source.close();stop();label.text="Map unavailable\n${e.message.orEmpty()}" }
+        } catch(e:Exception) { source.close();stop();hideStill();label.visibility=View.VISIBLE;label.text="Map unavailable\n${e.message.orEmpty()}" }
     }
     /**
      * Attribution and status. Full map: credits are in Settings › About › Open-source credits (with the installed
@@ -265,7 +292,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             addView(TextView(context).apply {
                 this.text="© OSM";textSize=9f;setTextColor(0xccffffff.toInt());setShadowLayer(2f,0f,0f,0xff000000.toInt())
                 contentDescription="Map data © OpenStreetMap contributors"
-            },LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,(8*density).toInt(),(4*density).toInt()) })
+            },LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.END).apply { setMargins(0,0,(8*density).toInt(),(4*density).toInt()) })
         }
     }
     private fun setStatus(text:String) {
@@ -297,12 +324,17 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             android.view.MotionEvent.ACTION_DOWN -> { downX=e.x;downY=e.y }
             android.view.MotionEvent.ACTION_UP -> {
                 val slop=android.view.ViewConfiguration.get(context).scaledTouchSlop
-                if(kotlin.math.abs(e.x-downX)<slop && kotlin.math.abs(e.y-downY)<slop) {
-                    playSoundEffect(android.view.SoundEffectConstants.CLICK)
-                    openFullMap()
-                }
+                if(kotlin.math.abs(e.x-downX)<slop && kotlin.math.abs(e.y-downY)<slop) performClick()
             }
         }
+        return true
+    }
+    /** A tap on the Home preview (also reachable by accessibility services) opens the full map. */
+    override fun performClick():Boolean {
+        val handled=super.performClick()
+        if(!preview || sample) return handled
+        playSoundEffect(android.view.SoundEffectConstants.CLICK)
+        openFullMap()
         return true
     }
     private fun openFullMap() {
@@ -328,11 +360,11 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         val v=context.mapButton(MapIcon(if(voiceOn()) "volume" else "mute",NavColors.TEXT),"") { toggleVoice() }
         voiceButton=v;describeVoice()
         column.addView(v,LinearLayout.LayoutParams(side,side))
-        addView(column,LayoutParams(WRAP,WRAP,Gravity.TOP or Gravity.RIGHT).apply { setMargins(0,edge,edge,0) })
+        addView(column,LayoutParams(WRAP,WRAP,Gravity.TOP or Gravity.END).apply { setMargins(0,edge,edge,0) })
         if(vector) {
             val zoom=context.mapButtonPair(context.mapButton(MapIcon("plus",NavColors.TEXT),"Zoom in") { vectorMap?.zoomBy(1.0) },
                 context.mapButton(MapIcon("minus",NavColors.TEXT),"Zoom out") { vectorMap?.zoomBy(-1.0) })
-            addView(zoom,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.RIGHT).apply { setMargins(0,0,edge,edge) })
+            addView(zoom,LayoutParams(WRAP,WRAP,Gravity.BOTTOM or Gravity.END).apply { setMargins(0,0,edge,edge) })
         }
     }
     private fun headingUp()=p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)
@@ -421,9 +453,11 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         try { manager?.removeUpdates(this) } catch(_:RuntimeException) { };manager=null
         homeGuidance?.close();homeGuidance=null
         if(preview) { route=null;ahead=null } // the preview shows only the route of the current navigation
+        remember()
         vectorMap?.destroy();vectorMap=null;vectorBox=null;lastFix=null;heading.reset();orientation=null;voiceButton=null
         map?.destroyAll();map=null;marker=null;routeLayer=null;altLayers.clear();streetLabel=null;bounds=null;statusLine=null
         removeAllViews();if(label.parent==null) addView(label,LayoutParams(MATCH,MATCH));label.visibility=View.VISIBLE
+        showStill()
     }
     /** Shows [path] as a line under the position marker, or removes it (null). Survives map reloads. */
     override fun showRoute(path:NavRoute?) { route=path;ahead=null;snapSegment=0;drawRoute() }
@@ -514,6 +548,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     override fun center():Pair<Double,Double> = vectorMap?.center() ?: (map?.model?.mapViewPosition?.center ?: lastCenter).let { it.latitude to it.longitude }
     companion object {
         private var initialized=false
+        /** See [still]; replaced, never recycled here, since an ImageView may still be drawing the previous one. */
+        private var lastFrame:android.graphics.Bitmap?=null
         private const val ROUTE_COLOR=0xcc39bed8.toInt()
         private const val ALTERNATIVE_COLOR=0xffb4bac2.toInt()
         private const val ALTERNATIVE_CASING=0xff0b1016.toInt()

@@ -49,6 +49,8 @@ internal class VectorMapView(
     private val onFailed: (String) -> Unit
 ) : FrameLayout(context) {
     private val density = resources.displayMetrics.density
+    /** Light map look ([MapAppearance]), decided when the view is created (changing it reloads the map). */
+    private val light = MapAppearance.light(context)
     private val view: MapView
     private var map: MapLibreMap? = null
     private var style: Style? = null
@@ -76,6 +78,20 @@ internal class VectorMapView(
         setPadding((8 * density).toInt(), (2 * density).toInt(), (8 * density).toInt(), (2 * density).toInt())
         maxWidth = (220 * density).toInt(); visibility = GONE
     }
+    /** Called once, the first time the map has fully rendered (its surface then shows real map content). */
+    var onRendered: (() -> Unit)? = null
+
+    /** The last frame drawn on the map surface, or null before the surface has content. */
+    fun snapshot(): Bitmap? {
+        fun texture(v: android.view.View): android.view.TextureView? = when (v) {
+            is android.view.TextureView -> v
+            is android.view.ViewGroup -> (0 until v.childCount).firstNotNullOfOrNull { texture(v.getChildAt(it)) }
+            else -> null
+        }
+        if (destroyed || map == null) return null
+        return try { texture(view)?.takeIf { it.isAvailable }?.bitmap } catch (_: RuntimeException) { null }
+    }
+
     /** Called when the driver drags the map (the card stops following GPS). */
     var onUserMove: (() -> Unit)? = null
     var onLongPress: ((Double, Double) -> Unit)? = null
@@ -87,9 +103,10 @@ internal class VectorMapView(
             .textureMode(true).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
         view = MapView(context, options)
         addView(view, LayoutParams(MATCH, MATCH))
-        addView(street, LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.LEFT))
+        addView(street, LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.START))
         view.onCreate(null)
         view.addOnDidFailLoadingMapListener { message -> if (!destroyed) onFailed(message ?: "style failed to load") }
+        view.addOnDidFinishRenderingMapListener { fully -> if (fully && !destroyed) { onRendered?.invoke(); onRendered = null } }
         view.getMapAsync { m -> if (!destroyed) ready(m) }
         view.onStart()
         view.onResume()
@@ -110,6 +127,7 @@ internal class VectorMapView(
         m.addOnMapLongClickListener { at -> onLongPress?.let { it(at.latitude, at.longitude); true } ?: false }
         val json = try {
             vector.style.readText().replace("{pack}", vector.style.parentFile!!.absolutePath.replace('\\', '/'))
+                .let { if (light) MapAppearance.lightStyle(it) else it }
         } catch (e: Exception) { onFailed("style unreadable (${e.javaClass.simpleName})"); return }
         m.setStyle(Style.Builder().fromJson(json)) { s -> if (!destroyed) styled(s) }
     }
@@ -122,7 +140,7 @@ internal class VectorMapView(
                 val buildings = FillExtrusionLayer("flare-buildings", "flare-buildings-source").apply {
                     sourceLayer = "building"
                     minZoom = 15.5f
-                    setProperties(PropertyFactory.fillExtrusionColor("#26374e"),
+                    setProperties(PropertyFactory.fillExtrusionColor(if (light) MapAppearance.LIGHT_BUILDINGS else "#26374e"),
                         PropertyFactory.fillExtrusionHeight(Expression.get("height")),
                         PropertyFactory.fillExtrusionBase(Expression.get("min_height")),
                         PropertyFactory.fillExtrusionOpacity(0.85f))
@@ -249,7 +267,21 @@ internal class VectorMapView(
      * ([NavMotion.glide]) and then stays there: no movement is predicted when fixes stop. First fixes, long gaps and
      * jumps are drawn at once.
      */
+    /**
+     * True while the Home page holding this map is being swiped: fixes are kept, not drawn, so the map surface does not
+     * redraw under the moving page; the latest one is drawn when the swipe ends ([paused] = false).
+     */
+    var paused = false
+        set(value) {
+            if (field == value) return
+            field = value
+            if (value) { glide?.cancel(); return }
+            pendingFix?.let { (lat, lon, heading) -> pendingFix = null; setVehicle(lat, lon, heading) }
+        }
+    private var pendingFix: Triple<Double, Double, Double?>? = null
+
     fun setVehicle(lat: Double, lon: Double, heading: Double?) {
+        if (paused) { pendingFix = Triple(lat, lon, heading); return }
         val target = LatLng(lat, lon)
         val now = SystemClock.elapsedRealtime()
         val gap = if (lastFixAt == 0L) 0L else now - lastFixAt

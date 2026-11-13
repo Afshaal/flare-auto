@@ -136,6 +136,7 @@ internal object LayoutPrefs {
         val key = if (left) Keys.LAYOUT_LEFT else Keys.LAYOUT_RIGHT
         if (prefs.contains(key)) return prefs.getString(key, if (left) "clock" else "media") ?: ""
         return if (left) { if (prefs.getBoolean(Keys.PROJECTION, true)) "clock" else "hidden" }
-        else { if (prefs.getBoolean(Keys.MEDIA, true)) "media" else "hidden" }
+        // No card chosen yet: the default media card is the Album player (an explicit "media" choice is kept above).
+        else { if (prefs.getBoolean(Keys.MEDIA, true)) "media_album" else "hidden" }
     }
 }

@@ -103,7 +103,7 @@ internal class UiKit(@JvmField val a: Activity) {
     inner class ValueRow(title: String, value: String, action: Runnable?) : LinearLayout(a) {
         val title: TextView = text(title, 16, t.textPrimary).apply { maxLines = 2; setPadding(0, dp(5), dp(12), dp(5)) }
         val value: TextView = text(value, 14, t.textSecondary).apply {
-            gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL
+            gravity = Gravity.END or Gravity.CENTER_VERTICAL
             maxLines = 2
         }
 
@@ -164,7 +164,7 @@ internal class UiKit(@JvmField val a: Activity) {
             minimumHeight = dp(56)
             setPadding(dp(16), 0, dp(16), 0)
             addView(text(title, 16, t.textPrimary).apply { maxLines = 2; setPadding(0, dp(5), dp(12), dp(5)) }, LayoutParams(0, WRAP, 1f))
-            addView(text("", 14, t.textSecondary).apply { gravity = Gravity.RIGHT or Gravity.CENTER_VERTICAL; maxLines = 2 }, LayoutParams(WRAP, WRAP))
+            addView(text("", 14, t.textSecondary).apply { gravity = Gravity.END or Gravity.CENTER_VERTICAL; maxLines = 2 }, LayoutParams(WRAP, WRAP))
             addView(text("−", 24, t.textPrimary).apply {
                 gravity = Gravity.CENTER
                 contentDescription = "Decrease $title"

@@ -73,7 +73,8 @@ internal object NavigationPack {
     /** Installed pack folders (those with a build-info.json), by name. */
     fun installed(context: Context): List<File> = root(context)?.let(::installedIn) ?: emptyList()
 
-    fun installedIn(root: File): List<File> = root.listFiles()?.filter { File(it, INFO).isFile }?.sortedBy { it.name } ?: emptyList()
+    /** Pack folders in [root]; hidden ones (".import-*" while a pack is being imported, see [PackImport]) are not packs. */
+    fun installedIn(root: File): List<File> = root.listFiles()?.filter { !it.name.startsWith(".") && File(it, INFO).isFile }?.sortedBy { it.name } ?: emptyList()
 
     /** Folder name the driver chose, or null. */
     fun selected(context: Context): String? = state(context).getString(SELECTED, null)
@@ -169,6 +170,11 @@ internal object NavigationPack {
             count++
         }
         return if (count == 0) "checksums.txt lists no files" else null
+    }
+
+    /** Records [pack] as checksum-verified (it was just verified, e.g. by [PackImport]), so it is not hashed again. */
+    fun markVerified(context: Context, pack: Pack) {
+        state(context).edit().putString(VERIFIED_PREFIX + pack.dir.name, stamp(pack)).apply()
     }
 
     private fun stamp(pack: Pack): String {

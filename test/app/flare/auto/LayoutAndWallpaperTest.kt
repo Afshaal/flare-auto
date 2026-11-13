@@ -18,7 +18,9 @@ class LayoutAndWallpaperTest {
     @Test
     fun legacyTwoCardLayoutMigrates() {
         assertEquals("clock", LayoutPrefs.legacyCard(TestPrefs(), true))
-        assertEquals("media", LayoutPrefs.legacyCard(TestPrefs(), false))
+        // No card chosen: the Album player is the default media card (r13); an explicit "media" choice is kept.
+        assertEquals("media_album", LayoutPrefs.legacyCard(TestPrefs(), false))
+        assertEquals("media", LayoutPrefs.legacyCard(TestPrefs(Keys.LAYOUT_RIGHT to "media"), false))
         assertEquals("hidden", LayoutPrefs.legacyCard(TestPrefs(Keys.PROJECTION to false), true))
         assertEquals("hidden", LayoutPrefs.legacyCard(TestPrefs(Keys.MEDIA to false), false))
         // An explicit choice wins over the old booleans.
@@ -29,8 +31,12 @@ class LayoutAndWallpaperTest {
     fun presetTableKeepsStoredIndexes() {
         assertEquals(listOf("Accent wave", "Black", "Ember", "Wine", "Midnight", "Forest", "Charcoal", "Soft Charcoal",
             "Dark Grey", "Medium Grey", "Warm Grey", "Black to Warm Grey", "Dark Grey to Warm Grey", "Black to Warm Red",
-            "Black to Burgundy", "Black to Copper", "Black to Home Ember", "Custom image"), WallpaperPack.HOME_NAMES.toList())
+            "Black to Burgundy", "Black to Copper", "Black to Home Ember", "Custom image",
+            // Light wallpapers (r13), appended after "Custom image" so every stored index keeps its meaning.
+            "Warm Ivory", "Soft Grey", "Pearl Haze", "Ivory to Silver"), WallpaperPack.HOME_NAMES.toList())
         assertEquals(17, WallpaperPack.CUSTOM_INDEX)
+        // Every theme's default Home wallpaper exists.
+        assertTrue(ThemeTokens.DEFAULT_WALLPAPERS.size == ThemeTokens.NAMES.size && ThemeTokens.DEFAULT_WALLPAPERS.all { WallpaperPack.indexOf(it) >= 0 })
         assertTrue(WallpaperPack.PRESETS[0] is WallpaperPack.Preset.Accent)
         assertEquals(0xff383838.toInt(), (WallpaperPack.PRESETS[9] as WallpaperPack.Preset.Solid).color)
         assertArrayEquals(intArrayOf(0xff242424.toInt(), 0xff393530.toInt(), 0xff393530.toInt()),

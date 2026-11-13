@@ -126,8 +126,9 @@ class SettingsActivity : Activity() {
         row(group, "Color mode", { SettingsValues.colorMode(prefs) }) {
             ThemedDialogs.Builder(this).setTitle("Color mode")
                 .setItems(arrayOf("Dark", "Light", "Automatic")) { _, selected ->
-                    prefs.edit().putString(Keys.THEME_MODE, arrayOf("dark", "light", "auto")[selected]).apply()
-                    ThemeTokens.invalidate()
+                    // Dark / Light also apply their themes (Burgundy Black, Cool Pearl with Accent wave).
+                    ThemeTokens.chooseMode(this, arrayOf("dark", "light", "auto")[selected])
+                    refreshValues()
                     ui.recolor(root)
                 }.show()
         }
@@ -136,6 +137,8 @@ class SettingsActivity : Activity() {
         row(group, "Theme", { ThemeTokens.NAMES[ThemeTokens.activeIndex(this)] }) { appearance("theme") }
         row(group, "Home wallpaper", { WallpaperPack.name(this, false) }) { appearance("home") }
         row(group, "App drawer wallpaper", { WallpaperPack.drawerName(this) }) { appearance("drawer") }
+        // The Home editor no longer has its own 24-hour switch; this is the one control (same preference).
+        toggle(group, "24-hour clock", Keys.CLOCK24, false)
         toggle(group, "Glass cards", Keys.GLASS_CARDS, true)
         toggle(group, "Animations", Keys.UI_ANIMATIONS, true)
         toggle(group, "Flip Home wallpaper", Keys.FLIP_GRADIENTS, false)
@@ -168,49 +171,76 @@ class SettingsActivity : Activity() {
         group = section("HOME")
         row(group, "Accent color", { SettingsValues.accent(prefs) }) { chooseAccent() }
         row(group, "Customize home screen", { "" }) { startActivity(Intent(this, GridEditorActivity::class.java)) }
-        toggle(group, "24-hour clock", Keys.CLOCK24, false)
         toggle(group, "Keep display active", Keys.AWAKE, true)
 
+        // Screensaver in four groups. Hidden controls keep their stored values; the song banner does not depend on
+        // the notification banners.
         group = section("SCREENSAVER")
+        subtitle("SCREENSAVER", "Display", group)
+        saverPreview(group)
+        row(group, "Display mode", { SettingsValues.saverMode(prefs) }) { chooseSaverMode() }
+        row(group, "Screensaver wallpaper", { WallpaperPack.name(this, true) }) { appearance("saver") }
+        toggleSaverFlip(group)
+        row(group, "Idle timeout", { SettingsValues.timeout(prefs) }) { chooseTimeout() }
+
+        val clock = subsection("SCREENSAVER", "Clock")
+        row(clock, "Clock style", { ClockStyles.labels[SettingsValues.saverClockIndex(prefs)] }) {
+            ThemedDialogs.Builder(this).setTitle("Screensaver clock style").setSingleChoiceItems(ClockStyles.labels, SettingsValues.saverClockIndex(prefs)) { _, selected ->
+                prefs.edit().putString(Keys.SAVER_CLOCK_STYLE, ClockStyles.ids[selected]).apply(); refreshValues()
+            }.show()
+        }
+        row(clock, "Clock size", { SettingsValues.clockSize(prefs) }) {
+            chooseInt("Clock size", arrayOf("Small", "Medium", "Large"), intArrayOf(96, 120, 140), Keys.SAVER_SIZE, 120)
+        }
+        toggle(clock, "Show date", Keys.SAVER_DATE, true)
+        toggle(clock, "Show vehicle label", Keys.SAVER_VEHICLE_LABEL, true)
+        val clockNote = ui.text("Clock settings appear when the display mode is Clock.", 13, ui.t.textSecondary).apply { setPadding(ui.dp(16), ui.dp(10), ui.dp(16), ui.dp(10)) }
+        ui.add(clock, clockNote)
+        refreshers.add {
+            val showsClock = prefs.getString(Keys.SAVER_MODE, "clock") != "image"
+            // Clock controls only while the mode shows a clock (values are kept when hidden).
+            for (i in 0 until clock.childCount) { val v = clock.getChildAt(i); if (v !== clockNote) v.visibility = if (showsClock) View.VISIBLE else View.GONE }
+            clockNote.visibility = if (showsClock) View.GONE else View.VISIBLE
+        }
+
+        val corners = subsection("SCREENSAVER", "Corner information")
         for (left in listOf(true, false)) {
             val key = if (left) Keys.SAVER_SLOT_LEFT else Keys.SAVER_SLOT_RIGHT
-            row(group, if (left) "Top-left information" else "Top-right information", { SettingsValues.saverSlot(prefs, left) }) {
+            row(corners, if (left) "Top-left information" else "Top-right information", { SettingsValues.saverSlot(prefs, left) }) {
                 ThemedDialogs.Builder(this).setTitle("Corner information").setItems(arrayOf("None", "Weather", "Sunrise / sunset", "Both")) { _, i ->
                     prefs.edit().putString(key, arrayOf("off", "weather", "sun", "both")[i]).apply(); refreshValues()
                 }.show()
             }
         }
-        toggle(group, "Song-change banner", Keys.SAVER_MUSIC_BANNER, false)
-        toggle(group, "Information over image wallpaper", Keys.SAVER_IMAGE_INFO, false)
-        toggle(group, "Notification banners", Keys.SAVER_BANNERS, false)
-        toggle(group, "Hide notification contents", Keys.SAVER_BANNER_PRIVATE, true)
-        row(group, "Notification apps", { "Choose allowed apps" }) {
-            startActivity(Intent(this, AppPickerActivity::class.java).putExtra(AppPickerActivity.ROLE, "banners"))
+        toggle(corners, "Information over image wallpaper", Keys.SAVER_IMAGE_INFO, false)
+
+        val banners = subsection("SCREENSAVER", "Banners")
+        toggle(banners, "Song-change banner", Keys.SAVER_MUSIC_BANNER, false)
+        toggle(banners, "Notification banners", Keys.SAVER_BANNERS, false)
+        val notificationRows = listOf(
+            toggle(banners, "Hide notification contents", Keys.SAVER_BANNER_PRIVATE, true),
+            row(banners, "Notification apps", { "Choose allowed apps" }) {
+                startActivity(Intent(this, AppPickerActivity::class.java).putExtra(AppPickerActivity.ROLE, "banners"))
+            },
+            row(banners, "Notification access", { if (mediaAllowed()) "Allowed" else "Enable" }) {
+                startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+            })
+        // Position, duration and size apply to both banners.
+        val layoutRows = listOf(
+            row(banners, "Banner position", { SettingsValues.bannerPosition(prefs) }) {
+                ThemedDialogs.Builder(this).setTitle("Banner position").setItems(arrayOf("Top left", "Top right", "Alternate corners")) { _, i ->
+                    prefs.edit().putString(Keys.SAVER_BANNER_POSITION, arrayOf("left", "right", "alternate")[i]).apply(); refreshValues()
+                }.show()
+            },
+            step(banners, "Banner duration (seconds)", Keys.SAVER_BANNER_SECONDS, 2, 15, 5, 1),
+            step(banners, "Banner size (%)", Keys.SAVER_BANNER_SIZE, 85, 120, 100, 5))
+        refreshers.add {
+            val notifications = prefs.getBoolean(Keys.SAVER_BANNERS, false)
+            val any = notifications || prefs.getBoolean(Keys.SAVER_MUSIC_BANNER, false)
+            notificationRows.forEach { shown(banners, it, notifications) }
+            layoutRows.forEach { shown(banners, it, any) }
         }
-        row(group, "Notification access", { if (mediaAllowed()) "Allowed" else "Enable" }) {
-            startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-        }
-        row(group, "Banner position", { SettingsValues.bannerPosition(prefs) }) {
-            ThemedDialogs.Builder(this).setTitle("Banner position").setItems(arrayOf("Top left", "Top right", "Alternate corners")) { _, i ->
-                prefs.edit().putString(Keys.SAVER_BANNER_POSITION, arrayOf("left", "right", "alternate")[i]).apply(); refreshValues()
-            }.show()
-        }
-        step(group, "Banner duration (seconds)", Keys.SAVER_BANNER_SECONDS, 2, 15, 5, 1)
-        step(group, "Banner size (%)", Keys.SAVER_BANNER_SIZE, 85, 120, 100, 5)
-        row(group, "Display mode", { SettingsValues.saverMode(prefs) }) { chooseSaverMode() }
-        row(group, "Screensaver wallpaper", { WallpaperPack.name(this, true) }) { appearance("saver") }
-        toggleSaverFlip(group)
-        row(group, "Idle timeout", { SettingsValues.timeout(prefs) }) { chooseTimeout() }
-        row(group, "Clock style", { ClockStyles.labels[SettingsValues.saverClockIndex(prefs)] }) {
-            ThemedDialogs.Builder(this).setTitle("Screensaver clock style").setSingleChoiceItems(ClockStyles.labels, SettingsValues.saverClockIndex(prefs)) { _, selected ->
-                prefs.edit().putString(Keys.SAVER_CLOCK_STYLE, ClockStyles.ids[selected]).apply(); refreshValues()
-            }.show()
-        }
-        row(group, "Clock size", { SettingsValues.clockSize(prefs) }) {
-            chooseInt("Clock size", arrayOf("Small", "Medium", "Large"), intArrayOf(96, 120, 140), Keys.SAVER_SIZE, 120)
-        }
-        toggle(group, "Show date", Keys.SAVER_DATE, true)
-        toggle(group, "Show vehicle label", Keys.SAVER_VEHICLE_LABEL, true)
+        refreshValues()
 
         group = section(OFFLINE_MAPS)
         offlineMaps = OfflineMapPanel(this, ui, group)
@@ -351,21 +381,68 @@ class SettingsActivity : Activity() {
         return group
     }
 
-    private fun row(group: LinearLayout, name: String, value: () -> String, action: (() -> Unit)? = null) {
+    private fun row(group: LinearLayout, name: String, value: () -> String, action: (() -> Unit)? = null): View {
         val view = ui.valueRow(name, value(), action?.let { Runnable(it) })
         ui.add(group, view)
         refreshers.add { view.setValue(value()) }
+        return view
+    }
+
+    /** A titled group inside a top-level category panel (e.g. the Screensaver's Display, Clock, Banners). */
+    private fun subsection(parent: String, title: String): LinearLayout {
+        val container = sections[parent] ?: error("$parent must be created first")
+        container.addView(ui.section(title.uppercase(Locale.ROOT)))
+        return ui.group().also { container.addView(it) }
+    }
+
+    /** Puts a sub-heading above [group], the first group of [parent]. */
+    private fun subtitle(parent: String, title: String, group: LinearLayout) {
+        val container = sections[parent] ?: return
+        container.addView(ui.section(title.uppercase(Locale.ROOT)), container.indexOfChild(group))
+    }
+
+    /** Shows or hides a row with the divider above it; its preference is not touched. */
+    private fun shown(group: LinearLayout, row: View, show: Boolean) {
+        val state = if (show) View.VISIBLE else View.GONE
+        row.visibility = state
+        group.getChildAt(group.indexOfChild(row) - 1)?.takeIf { it.tag == UiKit.Role.DIVIDER }?.visibility = state
+    }
+
+    /** Small screensaver preview: its wallpaper, with the clock in the chosen style when the mode shows one. */
+    private fun saverPreview(group: LinearLayout) {
+        val frame = android.widget.FrameLayout(this).apply { clipToOutline = true }
+        val clock = android.widget.TextClock(this).apply {
+            format12Hour = "h:mm"; format24Hour = "HH:mm"; textSize = 40f; setTextColor(0xffffffff.toInt())
+            setShadowLayer(6f, 0f, 2f, 0x99000000.toInt())
+        }
+        frame.addView(clock, android.widget.FrameLayout.LayoutParams(WRAP, WRAP, Gravity.CENTER))
+        val box = LinearLayout(this).apply { setPadding(ui.dp(16), ui.dp(12), ui.dp(16), ui.dp(12)); gravity = Gravity.CENTER }
+        box.addView(frame, LinearLayout.LayoutParams(ui.dp(240), ui.dp(135)))
+        group.addView(box)
+        refreshers.add {
+            val theme = ThemeTokens.get(this)
+            frame.background = WallpaperPack.saver(this, theme)
+            frame.outlineProvider = object : android.view.ViewOutlineProvider() {
+                override fun getOutline(v: View, out: android.graphics.Outline) { out.setRoundRect(0, 0, v.width, v.height, ui.dp(12).toFloat()) }
+            }
+            clock.format12Hour = if (prefs.clock24) "HH:mm" else "h:mm"; clock.format24Hour = clock.format12Hour
+            clock.typeface = ClockStyles.typeface(prefs.getString(Keys.SAVER_CLOCK_STYLE, null), true)
+            clock.visibility = if (prefs.getString(Keys.SAVER_MODE, "clock") == "image") View.GONE else View.VISIBLE
+            frame.contentDescription = "Screensaver preview: ${SettingsValues.saverMode(prefs)}, ${WallpaperPack.name(this, true)}"
+        }
     }
 
     private fun refreshValues() = refreshers.forEach { it() }
 
-    private fun toggleRow(group: LinearLayout, name: String, current: () -> Boolean, flip: () -> Unit) {
+    private fun toggleRow(group: LinearLayout, name: String, current: () -> Boolean, flip: () -> Unit): View {
         lateinit var view: UiKit.ToggleRow
         val refresh = { view.setChecked(current(), name) }
-        view = ui.toggle(name, current(), Runnable { flip(); refresh() })
+        // Other rows may depend on this switch (shown / hidden): refresh them all.
+        view = ui.toggle(name, current(), Runnable { flip(); refresh(); refreshValues() })
         refreshers.add(refresh)
         refresh()
         ui.add(group, view)
+        return view
     }
 
     private fun toggle(group: LinearLayout, name: String, key: String, default: Boolean) =
@@ -377,7 +454,7 @@ class SettingsActivity : Activity() {
             prefs.edit().putBoolean(Keys.SAVER_FLIP, !WallpaperPack.flip(prefs, "saver")).apply()
         }
 
-    private fun step(group: LinearLayout, name: String, key: String, min: Int, max: Int, default: Int, amount: Int) {
+    private fun step(group: LinearLayout, name: String, key: String, min: Int, max: Int, default: Int, amount: Int): View {
         lateinit var view: UiKit.StepperRow
         val refresh = { view.value.text = prefs.getInt(key, default).toString() }
         view = ui.stepper(name, prefs.getInt(key, default).toString(),
@@ -385,6 +462,7 @@ class SettingsActivity : Activity() {
             Runnable { prefs.edit().putInt(key, minOf(max, prefs.getInt(key, default) + amount)).apply(); refresh() })
         refreshers.add(refresh)
         ui.add(group, view)
+        return view
     }
 
     private fun scaleRow(group: LinearLayout, name: String, key: String) =
@@ -569,6 +647,10 @@ class SettingsActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == OfflineMapPanel.PICK_MAP && resultCode == RESULT_OK) {
             data?.data?.let { OfflineMapStore.importMap(this, it) }
+            return
+        }
+        if (requestCode == OfflineMapPanel.PICK_PACK && resultCode == RESULT_OK) {
+            data?.data?.let { uri -> PackImport.start(this, uri) { ok, message -> offlineMaps?.packImportDone(ok, message) } }
             return
         }
         if (requestCode == REQUEST_PICK && resultCode == RESULT_OK && data != null) {

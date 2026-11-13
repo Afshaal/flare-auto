@@ -113,3 +113,19 @@ internal class Forecast(context: Context, private val updated: () -> Unit) {
         }
     }
 }
+
+/** Short condition name for a WMO weather code (the codes the forecast cache stores). */
+internal fun weatherName(code: Int): String = when (code) {
+    0 -> "Clear"
+    1 -> "Mostly clear"
+    2 -> "Partly cloudy"
+    3 -> "Overcast"
+    45, 48 -> "Fog"
+    in 51..57 -> "Drizzle"
+    in 61..67 -> "Rain"
+    in 71..77 -> "Snow"
+    in 80..82 -> "Showers"
+    85, 86 -> "Snow showers"
+    in 95..99 -> "Thunderstorm"
+    else -> "Weather"
+}

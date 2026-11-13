@@ -20,7 +20,12 @@ import kotlin.math.abs
  * full size on a landscape head unit. Sizes are proportional to the screen, not fixed.
  */
 internal class EditorDrawer(private val a: Activity, private val ui: UiKit, title: String) {
-    class Category(val name: String, val cards: List<() -> View>)
+    /**
+     * A tab of cards. [variants]: optional horizontal style tabs above the cards (e.g. clock styles); [onVariant] is
+     * told the chosen one and the cards are rebuilt (they read it when built).
+     */
+    class Category(val name: String, val cards: List<() -> View>, val variants: List<String> = emptyList(),
+                   var variant: Int = 0, val onVariant: ((Int) -> Unit)? = null)
     /** One action on a card; [primary] chips are filled with the accent colour. */
     class Chip(val label: String, val enabled: Boolean = true, val primary: Boolean = false, val run: () -> Unit)
 
@@ -33,6 +38,8 @@ internal class EditorDrawer(private val a: Activity, private val ui: UiKit, titl
     }
     private val tabs = ui.column()
     private val grid = ui.column()
+    private val variantBar = LinearLayout(a).apply { gravity = Gravity.CENTER_VERTICAL }
+    private val headerEnd = LinearLayout(a).apply { gravity = Gravity.CENTER_VERTICAL }
     private val pager = LinearLayout(a).apply { gravity = Gravity.CENTER }
     private var categories: List<Category> = emptyList()
     private var category = 0
@@ -50,12 +57,14 @@ internal class EditorDrawer(private val a: Activity, private val ui: UiKit, titl
         }, LinearLayout.LayoutParams(ui.dp(48), ui.dp(48)))
         header.addView(ui.text(title, 22, t.textPrimary).apply { typeface = android.graphics.Typeface.DEFAULT_BOLD; setPadding(ui.dp(16), 0, 0, 0) },
             LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        header.addView(headerEnd, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
         root.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(56)))
         val body = LinearLayout(a)
         val screen = a.resources.displayMetrics
         val tabWidth = minOf(ui.dp(180), (screen.widthPixels * 0.2f).toInt())
         body.addView(tabs, LinearLayout.LayoutParams(tabWidth, ViewGroup.LayoutParams.MATCH_PARENT).apply { rightMargin = ui.dp(16) })
         val content = ui.column()
+        content.addView(variantBar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(44)).apply { bottomMargin = ui.dp(8) })
         content.addView(grid, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         content.addView(pager, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ui.dp(36)))
         body.addView(content, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
@@ -78,8 +87,37 @@ internal class EditorDrawer(private val a: Activity, private val ui: UiKit, titl
 
     fun dismiss() = dialog.dismiss()
 
-    /** Card: preview on top (tapping it runs the first enabled chip), name, then the chips in one row. */
-    fun card(preview: View, name: String, chips: List<Chip>): View {
+    /** Rebuilds the visible cards (after something they show changed, e.g. the placement target). */
+    fun refresh() { if (dialog.isShowing) renderPage() }
+
+    /** A control at the right of the title bar (e.g. where a widget is added). */
+    fun headerAction(view: View) { headerEnd.removeAllViews(); headerEnd.addView(view) }
+
+    /** Pill tabs in one row; [chosen] is selected. [pick] gets the tapped index. */
+    fun segmented(labels: List<String>, chosen: Int, pick: (Int) -> Unit): LinearLayout {
+        val row = LinearLayout(a).apply { gravity = Gravity.CENTER_VERTICAL }
+        labels.forEachIndexed { i, label ->
+            val on = i == chosen
+            row.addView(ui.text(label, 14, if (on) 0xffffffff.toInt() else t.textPrimary).apply {
+                gravity = Gravity.CENTER; isSingleLine = true
+                setPadding(ui.dp(16), 0, ui.dp(16), 0)
+                background = GradientDrawable().apply {
+                    cornerRadius = ui.dp(18).toFloat()
+                    if (on) setColor(t.accent) else { setColor(t.card); setStroke(ui.dp(1), t.cardBorder) }
+                }
+                contentDescription = if (on) "$label, selected" else label
+                isSelected = on
+                setOnClickListener { if (!on) pick(i) }
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ui.dp(36)).apply { marginEnd = ui.dp(8) })
+        }
+        return row
+    }
+
+    /**
+     * Card: preview on top (tapping it runs the first enabled chip), name, an optional [note] (e.g. why no size fits),
+     * then the chips in one row.
+     */
+    fun card(preview: View, name: String, chips: List<Chip>, note: String? = null): View {
         val card = ui.column().apply {
             background = GradientDrawable().apply { setColor(t.card); cornerRadius = ui.dp(18).toFloat(); setStroke(ui.dp(1), t.cardBorder) }
             setPadding(ui.dp(12), ui.dp(12), ui.dp(12), ui.dp(10))
@@ -92,7 +130,8 @@ internal class EditorDrawer(private val a: Activity, private val ui: UiKit, titl
             setOnClickListener { chips.firstOrNull { it.enabled }?.run?.invoke() }
         }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
         card.addView(frame, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        card.addView(ui.text(name, 15, t.textPrimary).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(ui.dp(2), ui.dp(8), 0, ui.dp(6)) })
+        card.addView(ui.text(name, 15, t.textPrimary).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(ui.dp(2), ui.dp(8), 0, if (note == null) ui.dp(6) else 0) })
+        if (note != null) card.addView(ui.text(note, 12, t.textSecondary).apply { maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END; setPadding(ui.dp(2), ui.dp(2), 0, ui.dp(6)) })
         val row = LinearLayout(a).apply { gravity = Gravity.CENTER_VERTICAL }
         chips.forEach { chip ->
             row.addView(ui.text(chip.label, 13, if (chip.primary) 0xffffffff.toInt() else t.textPrimary).apply {
@@ -134,7 +173,16 @@ internal class EditorDrawer(private val a: Activity, private val ui: UiKit, titl
         return maxOf(1, (n + columns * rows - 1) / (columns * rows))
     }
 
+    private fun renderVariants() {
+        variantBar.removeAllViews()
+        val c = categories.getOrNull(category)
+        variantBar.visibility = if (c == null || c.variants.isEmpty()) View.GONE else View.VISIBLE
+        if (c == null || c.variants.isEmpty()) return
+        variantBar.addView(segmented(c.variants, c.variant) { i -> c.variant = i; c.onVariant?.invoke(i); renderPage() })
+    }
+
     private fun renderPage() {
+        renderVariants()
         grid.removeAllViews()
         val cards = categories.getOrNull(category)?.cards ?: emptyList()
         val per = columns * rows
