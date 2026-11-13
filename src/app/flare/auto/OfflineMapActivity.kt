@@ -69,6 +69,12 @@ class OfflineMapActivity : Activity() {
         panel.turnCard.minimumWidth = dp(220)
         panel.size(width)
         stage.addView(panel.tripCard, FrameLayout.LayoutParams(WRAP, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(edge, 0, 0, edge) })
+        // Route overview (options + Start) and, while driving, the other routes: left side, above the trip card.
+        // Clear of the centred vehicle marker and the street name under it (about 90 dp each side of the centre).
+        val listWidth = minOf(dp(360), resources.displayMetrics.widthPixels / 2 - edge - dp(90)).coerceAtLeast(dp(220))
+        for (list in listOf(panel.optionsCard, panel.alternativesCard))
+            stage.addView(list, FrameLayout.LayoutParams(listWidth, WRAP, Gravity.BOTTOM or Gravity.START).apply { setMargins(edge, 0, 0, edge + dp(76)) })
+        card.overviewInset = listWidth + edge * 2
         card.onLocation = panel::update
         card.onSearch = panel::search
         card.onVoiceChanged = panel::voiceChanged

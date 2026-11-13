@@ -77,6 +77,15 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     /** Full map: spoken directions were switched on or off with the voice button. */
     var onVoiceChanged:(()->Unit)?=null
     private var route:NavRoute?=null
+    /** Gray alternative routes (route overview, and while navigating until the car passes their split). */
+    private var alternatives:List<NavRoute> = emptyList()
+    /** Routes being previewed after choosing a destination (flat overview, no following); null otherwise. */
+    private var overviewRoutes:List<NavRoute>?=null
+    /** Route segment of the last snapped fix (search hint for [NavMotion.snap]). */
+    private var snapSegment=0
+    private var altLayers=ArrayList<org.mapsforge.map.layer.overlay.Polyline>()
+    /** Mapsforge: street name under the centred marker while following. */
+    private var streetLabel:TextView?=null
     /** Part of [route] still ahead of the vehicle (null: all of it). */
     private var ahead:DoubleArray?=null
     private var routeLayer:org.mapsforge.map.layer.overlay.Polyline?=null
@@ -169,7 +178,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         view.onUserMove={ follow=false }
         view.onLongPress={ lat2,lon2 -> onLongPress?.invoke(lat2,lon2) }
         // The route may have been set before this view existed (guidance restores it while the map loads).
-        view.showRoute(route);ahead?.let { view.showRemaining(it) }
+        view.showRoute(route);ahead?.let { view.showRemaining(it) };view.showAlternatives(alternatives.map { it.points })
+        overviewRoutes?.let { routes -> view.post { if(vectorMap===view) fitOverview(routes) } }
         addView(view,0,LayoutParams(MATCH,MATCH));label.visibility=View.GONE
         addCredit("",if(inside) null else "Map center is outside the saved coverage")
         if(!preview) addButtons(true)
@@ -229,6 +239,12 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             if(!preview) addButtons(false)
             addPreviewOverlay()
             drawRoute()
+            if(!preview) addView(TextView(context).apply {
+                textSize=12f;setTextColor(NavColors.TEXT);maxLines=1;ellipsize=android.text.TextUtils.TruncateAt.END
+                background=NavColors.card(context,NavColors.CARD,10);maxWidth=(220*density).toInt();visibility=View.GONE
+                setPadding((8*density).toInt(),(2*density).toInt(),(8*density).toInt(),(2*density).toInt())
+            }.also { streetLabel=it },LayoutParams(WRAP,WRAP,Gravity.CENTER).apply { topMargin=(30*density).toInt() })
+            overviewRoutes?.let { routes -> view.post { if(map===view) fitOverview(routes) } }
             startGps(false)
         } catch(e:Exception) { source.close();stop();label.text="Map unavailable\n${e.message.orEmpty()}" }
     }
@@ -372,19 +388,28 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         onLocation?.invoke(location)
         homeGuidance?.update(location)
         if(vectorMap==null) lastFix=location
-        vectorMap?.let { v -> vectorFix(v,location);return }
+        // On the route and clearly following it: draw the marker on the line (GPS and lane offsets hidden).
+        val snapped=if(overviewRoutes!=null) null else NavMotion.snap(route,location.latitude,location.longitude,
+            if(location.hasAccuracy()) location.accuracy else null,if(location.hasBearing()) location.bearing else null,
+            if(location.hasSpeed()) location.speed else null,snapSegment)
+        if(snapped!=null) snapSegment=snapped.segment
+        val street=snapped?.let { NavMotion.street(route,it.along) }
+        vectorMap?.let { v -> vectorFix(v,location,snapped,street);return }
         val view=map ?: return
-        val point=LatLong(location.latitude.coerceIn(-85.0,85.0),location.longitude)
+        val point=LatLong((snapped?.lat ?: location.latitude).coerceIn(-85.0,85.0),snapped?.lon ?: location.longitude)
         if(bounds?.contains(point)==false) { setStatus("GPS position is outside the saved coverage");return }
         setStatus(creditText)
         if(marker==null) {
             val fill=AndroidGraphicFactory.INSTANCE.createPaint().apply { color=0xff39bed8.toInt() }
-            marker=org.mapsforge.map.layer.overlay.FixedPixelCircle(point,7f,fill,null);view.layerManager.layers.add(marker)
+            // 8 px (was 7): slightly larger; FixedPixelCircle radii are scaled by the display model.
+            marker=org.mapsforge.map.layer.overlay.FixedPixelCircle(point,8f,fill,null);view.layerManager.layers.add(marker)
         } else marker?.setLatLong(point)
-        if(follow) view.setCenter(point)
+        val centred=follow && overviewRoutes==null
+        if(centred) view.setCenter(point)
+        streetLabel?.let { it.text=street.orEmpty();it.visibility=if(centred && !street.isNullOrBlank()) View.VISIBLE else View.GONE }
         marker?.requestRedraw()
     }
-    private fun vectorFix(v:VectorMapView,fix:Location) {
+    private fun vectorFix(v:VectorMapView,fix:Location,snapped:NavMotion.Snapped?=null,street:String?=null) {
         val box=vectorBox ?: return
         if(!(fix.latitude in box[0]..box[2] && fix.longitude in box[1]..box[3])) { setStatus("GPS position is outside the saved coverage");return }
         setStatus(creditText)
@@ -392,8 +417,9 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         lastFix=fix
         val direction=heading.update(fix.latitude,fix.longitude,if(fix.hasBearing()) fix.bearing else null,
             if(fix.hasSpeed()) fix.speed else null,if(fix.hasAccuracy()) fix.accuracy else null)
-        v.setVehicle(fix.latitude,fix.longitude,direction)
-        if(follow) v.follow(headingUp(),!first)
+        v.setVehicle(snapped?.lat ?: fix.latitude,snapped?.lon ?: fix.longitude,if(snapped!=null && direction!=null) snapped.bearing else direction)
+        v.setStreet(street)
+        if(follow && overviewRoutes==null) v.follow(headingUp(),!first)
     }
     @Deprecated("Deprecated in Java") override fun onStatusChanged(provider:String?,status:Int,extras:Bundle?)=Unit
     override fun onProviderEnabled(provider:String)=Unit
@@ -404,11 +430,68 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         homeGuidance?.close();homeGuidance=null
         if(preview) { route=null;ahead=null } // the preview shows only the route of the current navigation
         vectorMap?.destroy();vectorMap=null;vectorBox=null;lastFix=null;heading.reset();orientation=null;voiceButton=null
-        map?.destroyAll();map=null;marker=null;routeLayer=null;bounds=null;statusLine=null
+        map?.destroyAll();map=null;marker=null;routeLayer=null;altLayers.clear();streetLabel=null;bounds=null;statusLine=null
         removeAllViews();if(label.parent==null) addView(label,LayoutParams(MATCH,MATCH));label.visibility=View.VISIBLE
     }
     /** Shows [path] as a line under the position marker, or removes it (null). Survives map reloads. */
-    override fun showRoute(path:NavRoute?) { route=path;ahead=null;drawRoute() }
+    override fun showRoute(path:NavRoute?) { route=path;ahead=null;snapSegment=0;drawRoute() }
+    /** Gray alternative routes; empty removes them. */
+    override fun showAlternatives(routes:List<NavRoute>) {
+        alternatives=routes
+        vectorMap?.let { it.showAlternatives(routes.map { r->r.points });return }
+        drawAlternatives()
+    }
+    /**
+     * Route overview after choosing a destination: a flat view fitting [routes] (the chosen one blue, the others
+     * gray) without following; null returns to following the car.
+     */
+    override fun overview(routes:List<NavRoute>?) {
+        overviewRoutes=routes
+        if(routes!=null) { follow=false;fitOverview(routes);return }
+        vectorMap?.endOverview()
+        // Mapsforge: back to the zoom used before the overview.
+        zoomBeforeOverview?.let { z -> map?.model?.mapViewPosition?.zoomLevel=z };zoomBeforeOverview=null
+        follow=preview || p.getBoolean(Keys.OFFLINE_MAP_FOLLOW,true)
+        if(follow && lastFix!=null) recenter()
+    }
+    /** Full map: pixels on the left covered by the route list during the overview (0: keep the bottom free). */
+    var overviewInset=0
+    private var zoomBeforeOverview:Byte?=null
+    private fun fitOverview(routes:List<NavRoute>) {
+        val left=overviewInset;val bottom=if(left>0) 0 else (height*0.38).toInt()
+        vectorMap?.let { it.overview(routes.map { r->r.points },left,bottom);return }
+        val view=map ?: return
+        var minLat=90.0;var minLon=180.0;var maxLat=-90.0;var maxLon=-180.0
+        for(r in routes) for(i in 0 until r.points.size/2) {
+            minLat=minOf(minLat,r.points[i*2]);maxLat=maxOf(maxLat,r.points[i*2]);minLon=minOf(minLon,r.points[i*2+1]);maxLon=maxOf(maxLon,r.points[i*2+1])
+        }
+        if(minLat>maxLat || view.width<=0) return
+        val box=org.mapsforge.core.model.BoundingBox(minLat,minLon,maxLat,maxLon)
+        val zoom=org.mapsforge.core.util.LatLongUtils.zoomForBounds(org.mapsforge.core.model.Dimension((view.width-left).coerceAtLeast(1),(view.height-bottom).coerceAtLeast(1)),box,
+            view.model.displayModel.tileSize)
+        if(zoomBeforeOverview==null) zoomBeforeOverview=view.model.mapViewPosition.zoomLevel
+        // Centre the routes in the part of the map not covered by the route list.
+        view.model.mapViewPosition.mapPosition=org.mapsforge.core.model.MapPosition(box.centerPoint,maxOf(zoom.toInt(),2).toByte())
+        view.model.mapViewPosition.moveCenter(left/2.0,-bottom/2.0)
+        streetLabel?.visibility=View.GONE
+    }
+    private fun drawAlternatives() {
+        val view=map ?: return
+        val layers=view.layerManager.layers
+        altLayers.forEach { layers.remove(it) };altLayers.clear()
+        // A dark casing under a light gray line: the 2D theme's roads are mid gray, so a plain gray line looks like a road.
+        for(r in alternatives) for((color,width) in listOf(ALTERNATIVE_CASING to 9f,ALTERNATIVE_COLOR to 5f)) {
+            val stroke=AndroidGraphicFactory.INSTANCE.createPaint().apply {
+                this.color=color;strokeWidth=width*density
+                setStyle(org.mapsforge.core.graphics.Style.STROKE);setStrokeCap(org.mapsforge.core.graphics.Cap.ROUND);setStrokeJoin(org.mapsforge.core.graphics.Join.ROUND)
+            }
+            val line=org.mapsforge.map.layer.overlay.Polyline(stroke,AndroidGraphicFactory.INSTANCE)
+            line.setPoints(List(r.points.size/2) { LatLong(r.points[it*2],r.points[it*2+1]) })
+            val below=routeLayer?.let { layers.indexOf(it) } ?: marker?.let { layers.indexOf(it) } ?: -1
+            if(below>=0) layers.add(below,line) else layers.add(line)
+            altLayers.add(line)
+        }
+    }
     /** Removes the travelled part of the line: only the route ahead of the vehicle stays drawn. */
     override fun routeProgress(segment:Int,along:Double) {
         val path=route ?: return
@@ -433,11 +516,14 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         val below=marker?.let { layers.indexOf(it) } ?: -1
         if(below>=0) layers.add(below,line) else layers.add(line)
         routeLayer=line
+        drawAlternatives()
     }
     /** Current map centre (or the configured centre before the map has opened). */
     override fun center():Pair<Double,Double> = vectorMap?.center() ?: (map?.model?.mapViewPosition?.center ?: lastCenter).let { it.latitude to it.longitude }
     companion object {
         private var initialized=false
         private const val ROUTE_COLOR=0xcc39bed8.toInt()
+        private const val ALTERNATIVE_COLOR=0xffb4bac2.toInt()
+        private const val ALTERNATIVE_CASING=0xff0b1016.toInt()
     }
 }

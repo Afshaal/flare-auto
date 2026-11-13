@@ -117,6 +117,8 @@ internal class HomeCards(
             "clock", "clock_only", "clock_minimal" -> buildClockCard(content, params, compact, card)
             "projection" -> buildProjectionCard(content, params)
             "media", "media_wide", "media_compact" -> buildMediaCard(content, params, compact || card != "media", card == "media_compact")
+            "media_album" -> buildAlbumCard(content, params)
+            "clock_date" -> buildDateClockCard(content, params)
             "weather", "weather_solar" -> buildWeatherCard(content, params, card == "weather_solar")
             "apps" -> buildAppCard(content, params)
             "offline_map" -> OfflineMapCard(activity, context, sampleData, preview = true).also { maps.add(it); content.addView(it, params) }
@@ -350,6 +352,141 @@ internal class HomeCards(
             if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) playbackButton = control
             controls.addView(control, LinearLayout.LayoutParams(0, MATCH, 1f).apply { rightMargin = dp(6) })
         }
+    }
+
+    /**
+     * "Album player": artwork upper left with the title and artist beside it, the progress bar with elapsed and total
+     * times below, and previous / play-pause / next in one evenly spaced row. Uses the same views as the other media
+     * cards, so Home fills them the same way (artwork or the note glyph, marquee title, seek row only when the track
+     * has a duration).
+     */
+    private fun buildAlbumCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = column().apply {
+            pad(this, 16, 12)
+            background = shape(12)
+        }
+        content.addView(card, params)
+        mediaAccessHint = text("Enable media access", 12, theme.accent, false).apply {
+            if (preview) visibility = View.GONE
+            gravity = Gravity.CENTER
+            setOnClickListener { activity.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)) }
+        }.also { card.addView(it, LinearLayout.LayoutParams(MATCH, WRAP)) }
+        val top = row().apply { gravity = Gravity.TOP }
+        card.addView(top, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        val art = ImageView(context).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            background = GradientDrawable().apply { setColor(theme.background); cornerRadius = dp(10).toFloat() }
+            clipToOutline = true
+        }
+        albumArt = art
+        top.addView(art, LinearLayout.LayoutParams(dp(96), dp(96)))
+        // Square artwork in the upper left, as tall as the row (at most 45% of its width); the text sits right beside it.
+        top.addOnLayoutChangeListener { _, left, top2, right, bottom, _, _, _, _ ->
+            val size = maxOf(1, minOf(bottom - top2, (right - left) * 45 / 100))
+            art.layoutParams?.let { if (it.width != size || it.height != size) { it.width = size; it.height = size; art.post { art.layoutParams = it } } }
+        }
+        val labels = column().apply { setPadding(dp(14), dp(2), 0, 0) }
+        top.addView(labels, LinearLayout.LayoutParams(0, MATCH, 1f))
+        sourceLabel = text("", 11, muted, false).apply { visibility = View.GONE; isSingleLine = true; ellipsize = TextUtils.TruncateAt.END }
+            .also { labels.addView(it) }
+        trackTitle = text("No media playing", 17, white, true).apply {
+            isSingleLine = true
+            ellipsize = TextUtils.TruncateAt.MARQUEE
+            marqueeRepeatLimit = -1
+            isSelected = true
+        }.also { labels.addView(it, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) }) }
+        trackArtist = text("", 13, muted, false).apply {
+            maxLines = 2
+            ellipsize = TextUtils.TruncateAt.END
+        }.also { labels.addView(it, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) }) }
+        val seek = row()
+        seekRow = seek
+        val elapsedText = text("0:00", 11, muted, false).also { elapsed = it }
+        val totalText = text("0:00", 11, muted, false).also { total = it }
+        val bar = SeekBar(context).apply {
+            progressTintList = ColorStateList.valueOf(theme.accent)
+            thumbTintList = ColorStateList.valueOf(theme.accent)
+            progressBackgroundTintList = ColorStateList.valueOf(theme.textSecondary)
+        }
+        progress = bar
+        seek.addView(elapsedText)
+        seek.addView(bar, LinearLayout.LayoutParams(0, dp(36), 1f))
+        seek.addView(totalText)
+        card.addView(seek, LinearLayout.LayoutParams(MATCH, dp(36)).apply { topMargin = dp(6) })
+        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar, value: Int, fromUser: Boolean) = Unit
+            override fun onStartTrackingTouch(seekBar: SeekBar) = onDragging(true)
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                onDragging(false)
+                onSeek(seekBar.progress.toLong())
+            }
+        })
+        val controls = row().apply { gravity = Gravity.CENTER }
+        card.addView(controls, LinearLayout.LayoutParams(MATCH, dp(52)))
+        card.addOnLayoutChangeListener { _, left, _, right, _, oldLeft, _, oldRight, _ ->
+            if (right - left != oldRight - oldLeft) {
+                if (!preview) onNarrow(false)
+                seek.visibility = if (duration() > 0) View.VISIBLE else View.GONE
+            }
+        }
+        for (key in MEDIA_KEYS) {
+            val control = ImageView(context).apply {
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setImageDrawable(MediaGlyph(when (key) {
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "play"
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "previous"
+                    else -> "next"
+                }, white))
+                contentDescription = when (key) {
+                    KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "Play or pause"
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "Previous track"
+                    else -> "Next track"
+                }
+                setOnClickListener { onMedia(key) }
+            }
+            if (key == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE) playbackButton = control
+            controls.addView(control, LinearLayout.LayoutParams(0, MATCH, 1f))
+        }
+    }
+
+    /**
+     * "Clock with date": the time as large as the card allows (12/24-hour setting, Home clock style), the date
+     * below it and a short accent line. Text sizes follow the launcher text-size setting.
+     */
+    private fun buildDateClockCard(content: LinearLayout, params: LinearLayout.LayoutParams) {
+        val card = column().apply {
+            pad(this, 18, 12)
+            gravity = Gravity.CENTER
+            background = shape(12)
+        }
+        content.addView(card, params)
+        // Home dims after sunset from the first environment (as the other clock cards do).
+        if (environments.isEmpty() && !sampleData) environments.add(EnvironmentInfo(context, TextView(context), SolarIcon(context, muted), "sun"))
+        val format = if (prefs.clock24) "HH:mm" else "h:mm"
+        val clock = TextClock(context).apply {
+            format12Hour = format
+            format24Hour = format
+            textSize = 84f * textScale
+            setAutoSizeTextTypeUniformWithConfiguration(24, maxOf(24, (84 * textScale).toInt()), 1, TypedValue.COMPLEX_UNIT_SP)
+            maxLines = 1
+            includeFontPadding = false
+            setTextColor(white)
+            typeface = ClockStyles.typeface(prefs.getString(Keys.HOME_CLOCK_STYLE, "classic"), false)
+            gravity = Gravity.CENTER
+        }
+        card.addView(clock, LinearLayout.LayoutParams(MATCH, 0, 1f))
+        card.addView(View(context).apply { background = HomeChrome.accent(theme) },
+            LinearLayout.LayoutParams(dp(56), dp(2)).apply { topMargin = dp(4); bottomMargin = dp(6); gravity = Gravity.CENTER_HORIZONTAL })
+        val date = TextClock(context).apply {
+            format12Hour = "EEEE, d MMMM"
+            format24Hour = "EEEE, d MMMM"
+            textSize = 15f * textScale
+            setTextColor(muted)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            gravity = Gravity.CENTER
+        }
+        card.addView(date, LinearLayout.LayoutParams(MATCH, WRAP))
     }
 
     private fun updateMediaWidth(pixels: Int, controls: LinearLayout, seek: LinearLayout, title: TextView) {

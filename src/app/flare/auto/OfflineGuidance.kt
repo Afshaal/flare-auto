@@ -14,6 +14,10 @@ internal interface NavMap {
     fun routeProgress(segment: Int, along: Double)
     /** Current map centre (route previews without GPS, search reference point). */
     fun center(): Pair<Double, Double>
+    /** Gray alternative routes (empty removes them). */
+    fun showAlternatives(routes: List<NavRoute>) {}
+    /** Flat overview fitting [routes] after a destination is chosen; null returns to following the vehicle. */
+    fun overview(routes: List<NavRoute>?) {}
 }
 
 /**
@@ -43,6 +47,19 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private val main=android.os.Handler(android.os.Looper.getMainLooper())
     val turnCard=TurnCard(c,compact)
     val tripCard=TripCard(c,compact)
+    /** Full map: route overview after choosing a destination (options and Start). */
+    val optionsCard=RouteListCard(c,"Routes","Start")
+    /** Full map while driving: the other routes computed with the chosen one, with their ETA comparison. */
+    val alternativesCard=RouteListCard(c,"Other routes",null)
+    /** Alternatives still ahead of their split from the chosen route ([NavMotion.divergesAt]). */
+    private class Alternative(val route:NavRoute,val label:String,val eta:String,val splitAt:Double)
+    private var alternatives:List<Alternative> = emptyList()
+    /** Overview waiting for Start: the options, the selected one, and where the car was when they were shown. */
+    private var options:List<NavRoute>?=null
+    private var optionsDest:OfflineDestinationPicker.Place?=null
+    private var optionsPreview=false
+    private var selected=0
+    private var optionsFrom:Location?=null
     /** Called whenever guidance starts or stops (the host may show or hide related controls). */
     var onActiveChanged:((Boolean)->Unit)?=null
 
@@ -90,6 +107,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
 
     fun choose(place:OfflineDestinationPicker.Place) {
         if(closed) return
+        endOverview();clearAlternatives()
         if(!pack.covers(place.lat,place.lon)) { turnCard.message("Outside ${pack.region} driving coverage");return }
         fun begin(lat:Double,lon:Double,asPreview:Boolean) {
             target=place;route=null;map.showRoute(null);tripCard.hide();tripCard.starred(saved.isStarred(place))
@@ -115,10 +133,11 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
             turnCard.message("Finding routes to ${dest.name}…")
             engine.routes(lat,lon,dest.lat,dest.lon,pack) { result->
                 if(closed || target!==dest) return@routes
-                result.fold({ found-> if(found.size<2) apply(found.first(),dest,asPreview) else offer(found,dest,asPreview) },failed)
+                result.fold({ found-> if(compact) apply(found.first(),dest,asPreview) else offer(found,dest,asPreview) },failed)
             }
             return
         }
+        clearAlternatives() // a recalculated route is compared with nothing (no stale ETAs)
         turnCard.message("Calculating route to ${dest.name}…")
         engine.route(lat,lon,dest.lat,dest.lon,pack,RouteOptions.decode(p.getString(Keys.OFFLINE_NAV_VIA,null))) { result->
             if(closed) return@route
@@ -126,20 +145,69 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         }
     }
 
-    /** Lets the driver pick one of [found] (fastest first); the fastest is shown meanwhile and used if dismissed. */
+    /**
+     * Route overview: the map shows [found] in a flat view (the selected route blue, the others gray) with the
+     * options listed; a tap selects, Start (or setting off: [OVERVIEW_START_M] from where they were shown) begins
+     * guidance on the selected route. One route found: the overview shows just that one.
+     */
     private fun offer(found:List<NavRoute>,dest:OfflineDestinationPicker.Place,asPreview:Boolean) {
-        map.showRoute(found.first());turnCard.message("Choose a route to ${dest.name}")
-        var picked=false
-        fun pick(i:Int) {
-            if(picked || closed || target!==dest) return
-            picked=true
-            val via=if(i==0) null else found[i].via ?: RouteOptions.viaPoint(found[i].points,found[0].points)
-            p.edit().apply { if(via==null) remove(Keys.OFFLINE_NAV_VIA) else putString(Keys.OFFLINE_NAV_VIA,RouteOptions.encode(via)) }.apply()
-            apply(found[i],dest,asPreview)
+        calculating=false;options=found;optionsDest=dest;optionsPreview=asPreview;selected=0;optionsFrom=location
+        turnCard.message(if(found.size>1) "Choose a route to ${dest.name}" else "Route to ${dest.name}")
+        showSelected()
+        map.overview(found)
+        optionsCard.onPick={ i-> if(options===found) { selected=i;showSelected() } }
+        optionsCard.onAction={ if(options===found) pick(selected) }
+        optionsCard.show(RouteOptions.summaries(found),0)
+    }
+
+    private fun showSelected() {
+        val found=options ?: return
+        val chosen=found[selected]
+        map.showRoute(chosen);map.showAlternatives(found.filterIndexed { i,_->i!=selected })
+        tripCard.show(chosen.distance,chosen.millis,p.clock24);optionsCard.select(selected)
+    }
+
+    /** Starts guidance on option [i] of the overview; the other options stay as gray alternatives until passed. */
+    private fun pick(i:Int) {
+        val found=options ?: return
+        val dest=optionsDest ?: return
+        if(closed || target!==dest) return
+        val asPreview=optionsPreview
+        endOverview()
+        val via=if(i==0) null else found[i].via ?: RouteOptions.viaPoint(found[i].points,found[0].points)
+        p.edit().apply { if(via==null) remove(Keys.OFFLINE_NAV_VIA) else putString(Keys.OFFLINE_NAV_VIA,RouteOptions.encode(via)) }.apply()
+        apply(found[i],dest,asPreview)
+        if(asPreview) return
+        val labels=RouteOptions.labels(found.map { it.roads })
+        alternatives=found.indices.filter { it!=i }.mapNotNull { j->
+            NavMotion.divergesAt(found[i],found[j])?.let { split-> Alternative(found[j],labels[j],NavMotion.compare(found[j].millis,found[i].millis),split) }
         }
-        ThemedDialogs.Builder(a).setTitle("Routes to ${dest.name}")
-            .setItems(RouteOptions.summaries(found).toTypedArray()) { _,i->pick(i) }
-            .setOnDismissListener { main.post { pick(0) } }.show() // after any item click: back or outside = fastest
+        showAlternatives()
+    }
+
+    private fun endOverview() {
+        if(options==null) return
+        options=null;optionsDest=null;optionsFrom=null;optionsCard.hide();map.overview(null)
+    }
+
+    private fun clearAlternatives() { if(alternatives.isNotEmpty()) { alternatives=emptyList();showAlternatives() } }
+
+    private fun showAlternatives() {
+        map.showAlternatives(alternatives.map { it.route })
+        if(compact) return
+        val list=alternatives
+        alternativesCard.onPick={ i-> list.getOrNull(i)?.let { switchTo(it) } }
+        if(list.isEmpty()) alternativesCard.hide() else alternativesCard.show(list.map { "${it.label} · ${it.eta}" },-1)
+    }
+
+    /** Drives the alternative instead: routes from the car through that option's point (one calculation). */
+    private fun switchTo(alt:Alternative) {
+        val dest=target ?: return
+        val via=alt.route.via ?: route?.let { RouteOptions.viaPoint(alt.route.points,it.points) }
+        p.edit().apply { if(via==null) remove(Keys.OFFLINE_NAV_VIA) else putString(Keys.OFFLINE_NAV_VIA,RouteOptions.encode(via)) }.apply()
+        clearAlternatives()
+        val fix=location
+        if(fix!=null && recent(fix)) calculate(fix.latitude,fix.longitude,false) else apply(alt.route,dest,false)
     }
 
     private fun apply(path:NavRoute,dest:OfflineDestinationPicker.Place,asPreview:Boolean) {
@@ -161,6 +229,9 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         if(closed || !fix.latitude.isFinite() || !fix.longitude.isFinite()) return
         location=fix
         if(!recent(fix)) { if(route!=null && !preview) turnCard.message("Waiting for an accurate GPS fix");return }
+        // Overview open and the car sets off: start with the selected route.
+        optionsFrom?.let { from-> if(options!=null && !optionsPreview && from.distanceTo(fix)>OVERVIEW_START_M) { pick(selected);return } }
+        if(options!=null) { if(optionsFrom==null) optionsFrom=fix;return }
         if(route==null) {
             if(!calculating && target!=null && p.getBoolean(Keys.OFFLINE_NAV_ACTIVE,false)) calculate(fix.latitude,fix.longitude,false)
             return
@@ -181,6 +252,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         }
         offRoute=0
         map.routeProgress(position.segment,position.along)
+        if(alternatives.any { position.along>it.splitAt }) { alternatives=alternatives.filter { position.along<=it.splitAt };showAlternatives() }
         val remaining=(path.cumulative.last()-position.along).coerceAtLeast(0.0)
         if(remaining<35 && NavGeometry.distance(fix.latitude,fix.longitude,path.points[path.points.size-2],path.points.last())<60) {
             arrived();return
@@ -197,6 +269,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private fun arrived() {
         val name=target?.name.orEmpty()
         speak("You have arrived near your destination")
+        endOverview();clearAlternatives()
         cachedRoute=null;cachedKey=null;route=null;target=null;preview=false
         p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply()
         map.showRoute(null);tripCard.hide();turnCard.message("You have arrived · $name")
@@ -224,6 +297,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     private fun speak(text:String) { if(p.getBoolean(Keys.OFFLINE_NAV_VOICE,true)) { if(!voiceReady) pendingSpeech=text;initVoice();if(voiceReady) voice?.speak(text,TextToSpeech.QUEUE_FLUSH,null,"flare-navigation") } }
 
     fun stopRoute() {
+        endOverview();clearAlternatives()
         cachedRoute=null;cachedKey=null;engine.close();route=null;target=null;calculating=false;preview=false
         p.edit().putBoolean(Keys.OFFLINE_NAV_ACTIVE,false).remove(Keys.OFFLINE_NAV_VIA).apply();map.showRoute(null)
         voice?.stop();voice?.shutdown();voice=null;voiceReady=false;pendingSpeech=null
@@ -238,6 +312,8 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         private var cachedKey:String?=null
         /** Within this distance of the chosen option's via point, it counts as passed. */
         private const val VIA_PASSED_M=2000.0
+        /** The car moved this far while the route overview was open: start guidance on the selected route. */
+        private const val OVERVIEW_START_M=80f
         /** Includes the pack, so a route from one pack is never reused after switching to another. */
         private fun key(pack:NavigationPack.Pack,lat:Double,lon:Double)="${pack.dir.absolutePath}|${pack.id}|$lat,$lon"
         /** Arabic-script ranges (Urdu street names): the English voice cannot read them. */

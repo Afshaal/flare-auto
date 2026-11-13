@@ -2,7 +2,7 @@ package app.flare.auto
 
 internal data class GridTile(val type:String,val x:Int,val y:Int,val w:Int,val h:Int) {
     val minWidth get()=if((type=="apps" || type=="clock_only" || type=="clock_minimal" || HostedWidgets.id(type)!=null)) 2 else 3
-    val minHeight get()=if((type=="clock" || type=="media" || type=="media_wide")) 3 else 2
+    val minHeight get()=if((type=="clock" || type=="media" || type=="media_wide" || type=="media_album")) 3 else 2
     fun overlaps(other:GridTile)=x<other.x+other.w && x+w>other.x && y<other.y+other.h && y+h>other.y
     fun valid()=(type in TYPES || HostedWidgets.id(type)!=null) && x>=0 && y>=0 && w>=minWidth && h>=minHeight && x+w<=8 && y+h<=6
     fun resized(corner:Int,dx:Int,dy:Int):GridTile {
@@ -20,7 +20,8 @@ internal data class GridTile(val type:String,val x:Int,val y:Int,val w:Int,val h
         else->resized(3,0,dy)
     }
     companion object {
-        val TYPES=listOf("clock","clock_only","clock_minimal","media","media_wide","media_compact","projection","apps","weather","weather_solar","offline_map")
+        val TYPES=listOf("clock","clock_only","clock_minimal","media","media_wide","media_compact","projection","apps","weather","weather_solar","offline_map",
+            "clock_date","media_album")
         fun validPage(tiles:List<GridTile>)=tiles.all { it.valid() } && tiles.map { if(it.type.startsWith("media")) "media" else it.type }.distinct().size==tiles.size &&
             tiles.indices.all { i -> (i+1 until tiles.size).none { j -> tiles[i].overlaps(tiles[j]) } }
     }

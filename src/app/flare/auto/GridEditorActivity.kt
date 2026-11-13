@@ -70,7 +70,11 @@ class GridEditorActivity:Activity() {
     private fun clearSelection() {
         selected=-1;dockSelected=-1;activeBoard?.let { it.selection=-1;it.invalidate() };contextPanel()
     }
+    /** Puts the widget being placed on the page (replacing the tile it was chosen for, if any). */
+    private fun place(candidate:GridTile) { if(replacement>=0) pages[page][replacement]=candidate else pages[page].add(candidate);placing=null;selected=-1 }
     private fun save() {
+        // Saving while a new widget is still being placed keeps it where it is shown (it was dropped before).
+        placing?.let { if(page in pages.indices) place(it) }
         draft.edit().putString(DashboardPages.KEY,DashboardPages.encode(pages)).putInt(Keys.DASHBOARD_DEFAULT,defaultPage).apply()
         val image=java.io.File(images,draft.getString(Keys.EDITOR_IMAGE,"missing") ?: "missing")
         if(image.isFile && draft.getInt(Keys.WALLPAPER_HOME,-1)==WallpaperPack.CUSTOM_INDEX) {
@@ -204,7 +208,7 @@ class GridEditorActivity:Activity() {
         panel.removeAllViews()
         val candidate=placing
         if(candidate!=null) {
-            command(panel,"Place ${candidate.w}×${candidate.h}") { edit { if(replacement>=0) pages[page][replacement]=candidate else pages[page].add(candidate);placing=null;selected=-1 } }
+            command(panel,"Place ${candidate.w}×${candidate.h}") { edit { place(candidate) } }
             command(panel,"Back to gallery") { gallery(replacement) };command(panel,"Cancel placement") { placing=null;render() };return
         }
         if(dockSelected>=0) {
@@ -214,7 +218,7 @@ class GridEditorActivity:Activity() {
         val tile=pages.getOrNull(page)?.getOrNull(selected)
         if(tile==null) return
         command(panel,"Change widget") { gallery(selected) }
-        if(tile.type.startsWith("clock")) { command(panel,"Clock & vehicle") { clockOptions() };command(panel,"Corners") { ThemedDialogs.Builder(this).setTitle("Clock corner").setItems(arrayOf("Top left","Top right")) { _,i->corner(i==0) }.show() } }
+        if(tile.type.startsWith("clock") && tile.type!="clock_date") { command(panel,"Clock & vehicle") { clockOptions() };command(panel,"Corners") { ThemedDialogs.Builder(this).setTitle("Clock corner").setItems(arrayOf("Top left","Top right")) { _,i->corner(i==0) }.show() } }
         if(tile.type=="apps") command(panel,"Applications") { apps() }
         if(HostedWidgets.id(tile.type)!=null) command(panel,"Widget settings") {
             try { HostedWidgets.host(this).startAppWidgetConfigureActivityForResult(this,HostedWidgets.id(tile.type)!!,0,721,null) }

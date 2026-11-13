@@ -12,7 +12,7 @@ internal class CardFrame(context: Context, private val child: View, type: String
     private val native = type == "offline_map" || HostedWidgets.id(type) != null
     private val minW = resources.displayMetrics.density * (if (type == "apps") 150 else 225)
     private val minH = resources.displayMetrics.density * when (type) {
-        "clock" -> 245; "media", "media_wide", "media_compact" -> 180; "projection" -> 76; "apps" -> 160; else -> 120
+        "clock" -> 245; "media", "media_wide", "media_compact" -> 180; "media_album" -> 200; "projection" -> 76; "apps" -> 160; else -> 120
     }
     private var scale = 1f
 

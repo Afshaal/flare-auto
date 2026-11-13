@@ -162,7 +162,7 @@ internal class GridBoard(context: Context, val tiles: MutableList<GridTile>, pri
                     else {
                         selection=selected; onChoose?.invoke(selected)
                         tiles.getOrNull(selected)?.let { tile ->
-                            if(tile.type.startsWith("clock") && e.y<height*(tile.y+1)/6f) onCorner?.invoke(e.x<width*(tile.x+tile.w/2f)/8f)
+                            if(tile.type.startsWith("clock") && tile.type!="clock_date" && e.y<height*(tile.y+1)/6f) onCorner?.invoke(e.x<width*(tile.x+tile.w/2f)/8f)
                         }; invalidate()
                     }
                 }

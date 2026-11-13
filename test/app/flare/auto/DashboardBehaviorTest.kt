@@ -27,6 +27,18 @@ class DashboardBehaviorTest {
         assertTrue(GridTile("projection",0,0,4,2).valid())
         assertTrue(GridTile("clock_minimal",0,0,2,2).valid())
     }
+    @Test fun newCardStylesFitTheirGallerySizes() {
+        for(type in listOf("media_album","clock_date")) {
+            val style=WidgetCatalog.styles.single { it.type==type }
+            for((w,h) in style.sizes) assertNotNull("$type $w x $h",WidgetCatalog.fit(emptyList(),type,w,h))
+        }
+        assertFalse(GridTile("media_album",0,0,4,2).valid()) // artwork + title + seek + controls need 3 rows
+        // Still one media card per page; a date clock may sit next to a media card.
+        assertFalse(GridTile.validPage(listOf(GridTile("media",0,0,4,6),GridTile("media_album",4,0,4,6))))
+        assertTrue(GridTile.validPage(listOf(GridTile("clock_date",0,0,4,3),GridTile("media_album",4,0,4,6),GridTile("apps",0,3,4,3))))
+        assertEquals(WidgetCatalog.styles.map { it.type }.size,WidgetCatalog.styles.map { it.type }.distinct().size)
+        assertTrue(WidgetCatalog.styles.all { it.type in GridTile.TYPES })
+    }
     @Test fun everyCornerResizesWithoutMovingItsOppositeAnchor() {
         val tile=GridTile("clock",2,1,4,4)
         val tl=tile.resized(0,-1,-1); assertEquals(6,tl.x+tl.w); assertEquals(5,tl.y+tl.h)

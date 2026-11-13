@@ -1,11 +1,15 @@
 package app.flare.auto
 
+import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
+import android.os.SystemClock
+import android.view.Gravity
 import android.widget.FrameLayout
+import android.widget.TextView
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -52,7 +56,24 @@ internal class VectorMapView(
     private var position: LatLng? = null
     private var heading: Double? = null
     private var destroyed = false
+    /** Remaining route for the fix the marker is still gliding to; drawn when it gets there. */
+    private var pendingAhead: DoubleArray? = null
     private var followZoomSet = false
+    /** Following the vehicle (set by [follow], cleared by a map gesture, [flatten] or [overview]). */
+    private var tracking = false
+    private var trackingHeadingUp = true
+    /** Gray alternative routes (overview and while navigating). */
+    private var alternatives: List<DoubleArray> = emptyList()
+    private var glide: ValueAnimator? = null
+    private var lastFixAt = 0L
+    private var lastFrameAt = 0L
+    /** Street name under the marker (shown only when [setStreet] has a reliable one). */
+    private val street = TextView(context).apply {
+        textSize = 12f; setTextColor(NavColors.TEXT); maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+        background = NavColors.card(context, NavColors.CARD, 10)
+        setPadding((8 * density).toInt(), (2 * density).toInt(), (8 * density).toInt(), (2 * density).toInt())
+        maxWidth = (220 * density).toInt(); visibility = GONE
+    }
     /** Called when the driver drags the map (the card stops following GPS). */
     var onUserMove: (() -> Unit)? = null
     var onLongPress: ((Double, Double) -> Unit)? = null
@@ -64,6 +85,7 @@ internal class VectorMapView(
             .textureMode(true).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
         view = MapView(context, options)
         addView(view, LayoutParams(MATCH, MATCH))
+        addView(street, LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.LEFT))
         view.onCreate(null)
         view.addOnDidFailLoadingMapListener { message -> if (!destroyed) onFailed(message ?: "style failed to load") }
         view.getMapAsync { m -> if (!destroyed) ready(m) }
@@ -77,11 +99,12 @@ internal class VectorMapView(
         m.uiSettings.isLogoEnabled = false
         m.uiSettings.isCompassEnabled = false
         if (!interactive) m.uiSettings.setAllGesturesEnabled(false)
-        m.setMinZoomPreference(8.0)
+        m.setMinZoomPreference(MIN_ZOOM)
         m.setMaxZoomPreference(MAX_ZOOM)
         m.setLatLngBoundsForCameraTarget(LatLngBounds.from(bbox[2], bbox[3], bbox[0], bbox[1]))
         m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(start).zoom(startZoom).build()))
-        m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) onUserMove?.invoke() }
+        m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) { tracking = false; onUserMove?.invoke() } }
+        m.addOnCameraMoveListener { placeStreet() }
         m.addOnMapLongClickListener { at -> onLongPress?.let { it(at.latitude, at.longitude); true } ?: false }
         val json = try {
             vector.style.readText().replace("{pack}", vector.style.parentFile!!.absolutePath.replace('\\', '/'))
@@ -93,6 +116,7 @@ internal class VectorMapView(
         style = s
         s.addImage(ARROW, marker(true))
         s.addImage(DOT, marker(false))
+        s.addSource(GeoJsonSource(ALTERNATIVES, EMPTY))
         s.addSource(GeoJsonSource(ROUTE, EMPTY))
         s.addSource(GeoJsonSource(VEHICLE, EMPTY))
         val below = if (s.getLayer("road-label") != null) "road-label" else null
@@ -106,20 +130,87 @@ internal class VectorMapView(
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineWidth(Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(),
                 Expression.stop(10, 2.5f), Expression.stop(14, 7f), Expression.stop(18, 19f))))
-        if (below != null) { s.addLayerBelow(casing, below); s.addLayerBelow(line, below) } else { s.addLayer(casing); s.addLayer(line) }
+        val gray = LineLayer("flare-alternatives", ALTERNATIVES).withProperties(
+            PropertyFactory.lineColor(ALTERNATIVE_COLOR), PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
+            PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
+            PropertyFactory.lineWidth(Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(),
+                Expression.stop(10, 2.5f), Expression.stop(14, 6f), Expression.stop(18, 16f))))
+        if (below != null) { s.addLayerBelow(gray, below); s.addLayerBelow(casing, below); s.addLayerBelow(line, below) }
+        else { s.addLayer(gray); s.addLayer(casing); s.addLayer(line) }
         s.addLayer(SymbolLayer("flare-vehicle", VEHICLE).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")), PropertyFactory.iconRotate(Expression.get("bearing")),
             PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
             PropertyFactory.iconPitchAlignment(Property.ICON_PITCH_ALIGNMENT_MAP),
             PropertyFactory.iconAllowOverlap(true), PropertyFactory.iconIgnorePlacement(true)))
         drawRoute()
+        drawAlternatives()
         drawVehicle()
     }
 
-    fun showRoute(path: NavRoute?) { route = path; ahead = null; drawRoute() }
+    fun showRoute(path: NavRoute?) { route = path; ahead = null; pendingAhead = null; drawRoute() }
+
+    /** Gray lines for alternative routes (lat,lon pairs each); empty removes them. */
+    fun showAlternatives(lines: List<DoubleArray>) { alternatives = lines; drawAlternatives() }
+
+    private fun drawAlternatives() {
+        val source = style?.getSourceAs<GeoJsonSource>(ALTERNATIVES) ?: return
+        val features = alternatives.filter { it.size >= 4 }.joinToString(",") { points ->
+            val coords = StringBuilder()
+            for (i in 0 until points.size / 2) {
+                if (i > 0) coords.append(',')
+                coords.append('[').append(fmt(points[i * 2 + 1])).append(',').append(fmt(points[i * 2])).append(']')
+            }
+            """{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[$coords]}}"""
+        }
+        source.setGeoJson("""{"type":"FeatureCollection","features":[$features]}""")
+    }
+
+    /**
+     * Flat north-up view fitting [lines] (route overview after choosing a destination); stops following until
+     * [follow] is called again. [left]/[bottom]: pixels covered by the host's panels.
+     */
+    fun overview(lines: List<DoubleArray>, left: Int, bottom: Int) {
+        val m = map ?: return
+        var minLat = 90.0; var minLon = 180.0; var maxLat = -90.0; var maxLon = -180.0
+        for (points in lines) for (i in 0 until points.size / 2) {
+            minLat = minOf(minLat, points[i * 2]); maxLat = maxOf(maxLat, points[i * 2])
+            minLon = minOf(minLon, points[i * 2 + 1]); maxLon = maxOf(maxLon, points[i * 2 + 1])
+        }
+        if (minLat > maxLat) return
+        tracking = false
+        glide?.cancel()
+        // Intercity routes need less than the browsing limit (packs have tiles from zoom 4); restored by [endOverview].
+        m.setMinZoomPreference(OVERVIEW_MIN_ZOOM)
+        val edge = (24 * density).toInt()
+        val bounds = LatLngBounds.from(maxLat, maxLon, minLat, minLon)
+        val pad = intArrayOf(left + edge, edge, (72 * density).toInt(), bottom + edge)
+        // Flat and unpadded first: the fitted zoom must not depend on the following camera's tilt or padding.
+        m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(bounds.center)
+            .zoom(m.cameraPosition.zoom).bearing(0.0).tilt(0.0).padding(0.0, 0.0, 0.0, 0.0).build()))
+        val zoom = m.getCameraForLatLngBounds(bounds, pad)?.zoom ?: return
+        // The padding keeps the routes centred in the part of the map not covered by the route list.
+        m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(bounds.center).zoom(zoom)
+            .bearing(0.0).tilt(0.0).padding(pad[0].toDouble(), pad[1].toDouble(), pad[2].toDouble(), pad[3].toDouble()).build()))
+    }
+
+    /** Leaves the route overview: the normal minimum zoom applies again. */
+    fun endOverview() {
+        val m = map ?: return
+        m.setMinZoomPreference(MIN_ZOOM)
+        followZoomSet = false // settle at the driving zoom again
+        m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).padding(0.0, 0.0, 0.0, 0.0).build()))
+    }
 
     /** Only the part of the route ahead of the vehicle stays drawn ([NavGeometry.remaining]). */
-    fun showRemaining(points: DoubleArray) { if (route != null) { ahead = points; drawRoute() } }
+    fun showRemaining(points: DoubleArray) {
+        if (route == null) return
+        // While the marker glides to the new fix, keep the line from where it is shown (no gap ahead of the marker).
+        // A glide cut short by this fix had nearly reached the previous one: its line goes first (lag of one fix at most).
+        if (glide?.isRunning == true) { applyPendingAhead(); pendingAhead = points; return }
+        ahead = points; pendingAhead = null; drawRoute()
+    }
+
+    private fun applyPendingAhead() { pendingAhead?.let { ahead = it; pendingAhead = null; drawRoute() } }
 
     private fun drawRoute() {
         val source = style?.getSourceAs<GeoJsonSource>(ROUTE) ?: return
@@ -133,9 +224,57 @@ internal class VectorMapView(
         source.setGeoJson("""{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[$coords]}}""")
     }
 
-    /** New GPS position and smoothed heading (null: direction unknown, shown as a plain dot). */
+    /**
+     * New vehicle position and heading (null: direction unknown, shown as a plain dot). The marker (and the camera
+     * while following) glides from where it is shown to the new fix over about the fix interval
+     * ([NavMotion.glide]) and then stays there: no movement is predicted when fixes stop. First fixes, long gaps and
+     * jumps are drawn at once.
+     */
     fun setVehicle(lat: Double, lon: Double, heading: Double?) {
-        position = LatLng(lat, lon); this.heading = heading; drawVehicle()
+        val target = LatLng(lat, lon)
+        val now = SystemClock.elapsedRealtime()
+        val gap = if (lastFixAt == 0L) 0L else now - lastFixAt
+        lastFixAt = now
+        glide?.cancel()
+        val from = position
+        val fromHeading = this.heading
+        val duration = if (from == null || !isShown) null else NavMotion.glide(gap, from.distanceTo(target))
+        if (duration == null || from == null) { position = target; this.heading = heading; drawVehicle(); applyPendingAhead(); if (tracking) camera(false); return }
+        val origin: LatLng = from
+        glide = ValueAnimator.ofFloat(0f, 1f).apply {
+            this.duration = duration
+            interpolator = android.view.animation.LinearInterpolator()
+            addUpdateListener { a ->
+                if (destroyed) { a.cancel(); return@addUpdateListener }
+                val f = a.animatedValue as Float
+                val frame = SystemClock.elapsedRealtime()
+                if (f < 1f && frame - lastFrameAt < FRAME_MS) return@addUpdateListener // ~30 fps is enough and spares the GPU
+                lastFrameAt = frame
+                position = LatLng(origin.latitude + (target.latitude - origin.latitude) * f, origin.longitude + (target.longitude - origin.longitude) * f)
+                this@VectorMapView.heading = if (heading == null || fromHeading == null) heading else NavMotion.turn(fromHeading, heading, f)
+                drawVehicle()
+                if (f >= 1f) applyPendingAhead()
+                if (tracking) camera(false)
+            }
+            start()
+        }
+    }
+
+    /** Street under the marker, or null to hide the label. */
+    fun setStreet(name: String?) {
+        street.text = name.orEmpty()
+        street.visibility = if (name.isNullOrBlank()) GONE else VISIBLE
+        placeStreet()
+    }
+
+    private fun placeStreet() {
+        if (street.visibility != VISIBLE) return
+        val m = map ?: return
+        val at = position ?: return
+        val point = m.projection.toScreenLocation(at)
+        street.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.AT_MOST), MeasureSpec.makeMeasureSpec(height, MeasureSpec.AT_MOST))
+        street.translationX = (point.x - street.measuredWidth / 2f).coerceIn(0f, maxOf(0f, (width - street.measuredWidth).toFloat()))
+        street.translationY = (point.y + MARKER_DP * density * 0.75f).coerceIn(0f, maxOf(0f, (height - street.measuredHeight).toFloat()))
     }
 
     private fun drawVehicle() {
@@ -144,6 +283,7 @@ internal class VectorMapView(
         val icon = if (heading == null) DOT else ARROW
         source.setGeoJson("""{"type":"Feature","properties":{"icon":"$icon","bearing":${fmt(heading ?: 0.0)}},""" +
             """"geometry":{"type":"Point","coordinates":[${fmt(at.longitude)},${fmt(at.latitude)}]}}""")
+        placeStreet()
     }
 
     /**
@@ -154,6 +294,15 @@ internal class VectorMapView(
     var followZoom = FOLLOW_ZOOM
 
     fun follow(headingUp: Boolean, animate: Boolean) {
+        tracking = true
+        trackingHeadingUp = headingUp
+        // While the marker glides, every frame moves the camera with it.
+        if (glide?.isRunning == true) return
+        camera(animate)
+    }
+
+    private fun camera(animate: Boolean) {
+        val headingUp = trackingHeadingUp
         val m = map ?: return
         val at = position ?: return
         val current = m.cameraPosition
@@ -175,6 +324,7 @@ internal class VectorMapView(
 
     /** Flat north-up view around the current centre (leaving heading-up while not following). */
     fun flatten() {
+        tracking = false
         val m = map ?: return
         m.easeCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).bearing(0.0).tilt(0.0)
             .padding(0.0, 0.0, 0.0, 0.0).build()), 400)
@@ -187,6 +337,7 @@ internal class VectorMapView(
     fun destroy() {
         if (destroyed) return
         destroyed = true
+        glide?.cancel(); glide = null
         onUserMove = null; onLongPress = null; style = null; map = null
         try { view.onPause(); view.onStop(); view.onDestroy() } catch (_: RuntimeException) { }
         removeAllViews()
@@ -223,6 +374,10 @@ internal class VectorMapView(
 
     companion object {
         private const val ROUTE = "flare-route-source"
+        private const val ALTERNATIVES = "flare-alternatives-source"
+        private const val ALTERNATIVE_COLOR = 0xff7d8794.toInt()
+        /** Minimum time between glide frames (about 30 fps). */
+        private const val FRAME_MS = 32L
         private const val VEHICLE = "flare-vehicle-source"
         private const val ARROW = "flare-vehicle-arrow"
         private const val DOT = "flare-vehicle-dot"
@@ -233,11 +388,13 @@ internal class VectorMapView(
         const val HEADING_TILT = 55.0
         /** Closest zoom (tiles stop at z15 and are over-zoomed; streets stay sharp as vectors). */
         const val MAX_ZOOM = 20.5
+        private const val MIN_ZOOM = 8.0
+        private const val OVERVIEW_MIN_ZOOM = 4.0
         /** Default following zoom: full map; the Home widget uses [WIDGET_FOLLOW_ZOOM] (smaller view, a bit wider). */
         const val FOLLOW_ZOOM = 17.4
         const val WIDGET_FOLLOW_ZOOM = 16.9
-        /** Vehicle marker diameter (44 dp in r2, 32 dp in r3). */
-        const val MARKER_DP = 23
+        /** Vehicle marker diameter (44 dp in r2, 32 dp in r3, 23 dp in r4, 27 dp since the glide update). */
+        const val MARKER_DP = 27
         private const val FOLLOW_MS = 950
         /** Camera moves longer than this are not animated. */
         private const val JUMP_M = 1500.0

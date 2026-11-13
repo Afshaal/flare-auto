@@ -208,3 +208,57 @@ internal fun Context.mapButtonPair(top: ImageView, bottom: ImageView, size: Int 
         addView(View(context).apply { setBackgroundColor(NavColors.BORDER) }, 1, LinearLayout.LayoutParams(dp(size - 18), dp(1)).apply { gravity = Gravity.CENTER_HORIZONTAL })
     }
 
+
+/**
+ * A list of routes over the map. Route overview ([action] "Start"): one row per option, the selected one outlined;
+ * a tap selects, the button starts guidance. While driving (no [action]): the other routes computed with the chosen
+ * one and their ETA comparison; a tap switches to that route.
+ */
+internal class RouteListCard(context: Context, private val title: String, private val action: String?) : LinearLayout(context) {
+    private val rows = LinearLayout(context).apply { orientation = VERTICAL }
+    private var selected = -1
+    var onPick: ((Int) -> Unit)? = null
+    var onAction: (() -> Unit)? = null
+
+    init {
+        orientation = VERTICAL
+        background = NavColors.card(context, NavColors.CARD, 16)
+        setPadding(context.dp(10), context.dp(8), context.dp(10), context.dp(10))
+        visibility = View.GONE
+        addView(TextView(context).apply {
+            text = title; textSize = 12f; setTextColor(NavColors.MUTED); setPadding(context.dp(4), 0, 0, context.dp(4))
+        })
+        addView(rows)
+        if (action != null) addView(TextView(context).apply {
+            text = action; textSize = 15f; setTypeface(Typeface.DEFAULT, Typeface.BOLD); setTextColor(NavColors.TEXT)
+            gravity = Gravity.CENTER; contentDescription = "$action guidance"
+            background = GradientDrawable().apply { setColor(START); cornerRadius = context.dp(18).toFloat() }
+            setOnClickListener { onAction?.invoke() }
+        }, LayoutParams(LayoutParams.MATCH_PARENT, context.dp(40)).apply { topMargin = context.dp(8) })
+    }
+
+    /** Shows [lines] (one per route); [chosen] outlined, -1 for none. Empty hides the card. */
+    fun show(lines: List<String>, chosen: Int) {
+        rows.removeAllViews()
+        lines.forEachIndexed { i, line ->
+            rows.addView(TextView(context).apply {
+                text = line; textSize = 14f; setTextColor(NavColors.TEXT); maxLines = 2; ellipsize = TextUtils.TruncateAt.END
+                minHeight = context.dp(44); gravity = Gravity.CENTER_VERTICAL
+                setPadding(context.dp(10), context.dp(4), context.dp(10), context.dp(4))
+                setOnClickListener { onPick?.invoke(i) }
+            }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { topMargin = if (i > 0) context.dp(4) else 0 })
+        }
+        select(chosen)
+        visibility = if (lines.isEmpty()) View.GONE else View.VISIBLE
+    }
+
+    fun select(chosen: Int) {
+        selected = chosen
+        for (i in 0 until rows.childCount) rows.getChildAt(i).background =
+            if (i == chosen) GradientDrawable().apply { cornerRadius = context.dp(10).toFloat(); setStroke(context.dp(2), START); setColor(0x22000000) } else null
+    }
+
+    fun hide() { visibility = View.GONE; rows.removeAllViews() }
+
+    private companion object { const val START = 0xff2f7dff.toInt() }
+}
