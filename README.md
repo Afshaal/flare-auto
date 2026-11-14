@@ -36,7 +36,7 @@ Needs Android 8.0 or newer, landscape. CarPlay and Android Auto need their own a
 ## Map packs
 
 Offline navigation needs a navigation pack. Packs for **Lahore** and **Kuwait** are attached to the
-[latest release](https://github.com/Afshaal/flare-auto/releases/latest): copy the ZIP to the head unit and choose
+[v1.2.1 release](https://github.com/Afshaal/flare-auto/releases/tag/v1.2.1): copy the ZIP to the head unit and choose
 **Settings › Offline maps › Import navigation pack**. Each pack's `NOTICE.md` lists its data sources.
 
 ## Build
