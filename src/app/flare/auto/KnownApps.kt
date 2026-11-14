@@ -111,12 +111,18 @@ internal object KnownApps {
     }
 }
 
-/** Personal / vehicle defaults, kept at their current values. Empty values hide the matching label. */
+/**
+ * Vehicle label defaults. Empty since 1.2.0 (generic build): a new install shows no vehicle name or badge until the
+ * driver sets one. Installs from before keep what they showed (see [ProfileStore.keepVehicleLabels]).
+ */
 internal object Defaults {
     /** Vehicle name on Home and the screensaver (preference "brand_text"). */
-    const val VEHICLE_NAME = "CIVIC"
+    const val VEHICLE_NAME = ""
     /** Trim badge text (preference "badge_text"). */
-    const val TRIM_BADGE = "RS"
+    const val TRIM_BADGE = ""
+    /** What 1.1.0 and earlier showed when nothing was saved; written into existing profiles once. */
+    const val LEGACY_VEHICLE_NAME = "CIVIC"
+    const val LEGACY_TRIM_BADGE = "RS"
     /** Badge text that is drawn with the stylised badge glyph instead of plain text. */
     const val TRIM_BADGE_GLYPH = "RS"
 }

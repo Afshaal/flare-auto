@@ -6,6 +6,26 @@ import org.json.JSONObject
 internal object ProfileStore {
     data class Driver(val id: String, val name: String, val avatar:Int=0)
     private fun registry(c: Context) = c.applicationContext.getSharedPreferences("drivers", 0)
+
+    /**
+     * Once, on the first start of 1.2.0: profiles that already exist and never saved a vehicle name or badge get the
+     * old built-in "CIVIC" / "RS" written in, so the now-empty defaults change nothing for them. A new install has no
+     * saved settings yet and stays generic.
+     */
+    fun keepVehicleLabels(c: Context) {
+        val marker = registry(c)
+        if (marker.getBoolean(VEHICLE_LABELS_KEPT, false)) return
+        for (driver in drivers(c)) {
+            val prefs = c.applicationContext.getSharedPreferences(if (driver.id == "default") "home" else "driver_" + driver.id, 0)
+            if (prefs.all.isEmpty()) continue
+            prefs.edit().apply {
+                if (!prefs.contains(Keys.BRAND_TEXT)) putString(Keys.BRAND_TEXT, Defaults.LEGACY_VEHICLE_NAME)
+                if (!prefs.contains(Keys.BADGE_TEXT)) putString(Keys.BADGE_TEXT, Defaults.LEGACY_TRIM_BADGE)
+            }.apply()
+        }
+        marker.edit().putBoolean(VEHICLE_LABELS_KEPT, true).apply()
+    }
+    private const val VEHICLE_LABELS_KEPT = "vehicle_labels_kept_120"
     fun active(c: Context): String = registry(c).getString("active", "default") ?: "default"
     fun preferences(c: Context): SharedPreferences = if(c is EditorContext) c.draft else c.applicationContext.getSharedPreferences(
         if (active(c) == "default") "home" else "driver_" + active(c), 0)

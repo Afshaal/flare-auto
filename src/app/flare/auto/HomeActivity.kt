@@ -167,6 +167,7 @@ class HomeActivity : Activity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        ProfileStore.keepVehicleLabels(this)
         driverId = ProfileStore.active(this)
         window.setBackgroundDrawable(ColorDrawable(ThemeTokens.get(this).background))
         prefs = ProfileStore.preferences(this)
