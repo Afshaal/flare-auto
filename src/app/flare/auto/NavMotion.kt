@@ -18,6 +18,13 @@ internal object NavMotion {
     const val SNAP_SLOW_M = 6.0
     /** Travel direction and route direction must agree within this many degrees. */
     const val SNAP_ANGLE = 35.0
+    /**
+     * Once on the route, these wider limits keep it there ([snap] `held`): a fix a few metres outside the normal limits
+     * no longer drops the marker off the line for one second and back (sideways hop and map wobble).
+     */
+    const val HELD_MAX_M = 30.0
+    const val HELD_SLOW_M = 12.0
+    const val HELD_ANGLE = 50.0
     /** Gaps longer than this, or jumps farther than [GLIDE_MAX_M], are drawn at once. */
     const val GLIDE_MAX_GAP_MS = 5000L
     const val GLIDE_MAX_M = 150.0
@@ -35,9 +42,10 @@ internal object NavMotion {
      * The point of [route] nearest the fix when the fix is accurate ([SNAP_ACCURACY_M]), close to the route
      * (within its accuracy, at most [SNAP_MAX_M]) and travelling the route's way (GPS bearing within [SNAP_ANGLE]
      * at [HeadingFilter.TRUSTED_SPEED] or faster; slower or without a bearing, within [SNAP_SLOW_M]). Otherwise null:
-     * the raw GPS position is shown.
+     * the raw GPS position is shown. [held]: the previous fix was snapped, so the wider HELD_ limits apply.
      */
-    fun snap(route: NavRoute?, lat: Double, lon: Double, accuracy: Float?, bearing: Float?, speed: Float?, previous: Int): Snapped? {
+    fun snap(route: NavRoute?, lat: Double, lon: Double, accuracy: Float?, bearing: Float?, speed: Float?, previous: Int,
+             held: Boolean = false): Snapped? {
         if (route == null || route.points.size < 4 || accuracy == null || accuracy > SNAP_ACCURACY_M) return null
         val position = NavGeometry.nearest(route, lat, lon, previous)
         val count = route.points.size / 2
@@ -45,9 +53,9 @@ internal object NavMotion {
         val p = route.points
         val routeBearing = HeadingFilter.bearingBetween(p[i * 2], p[i * 2 + 1], p[i * 2 + 2], p[i * 2 + 3])
         val moving = speed != null && bearing != null && speed >= HeadingFilter.TRUSTED_SPEED && bearing.isFinite()
-        val ok = if (moving) position.away <= minOf(SNAP_MAX_M, maxOf(8.0, accuracy * 1.2)) &&
-            abs(HeadingFilter.shortest(bearing!!.toDouble() - routeBearing)) <= SNAP_ANGLE
-        else position.away <= SNAP_SLOW_M
+        val ok = if (moving) position.away <= (if (held) minOf(HELD_MAX_M, maxOf(15.0, accuracy * 2.0)) else minOf(SNAP_MAX_M, maxOf(8.0, accuracy * 1.2))) &&
+            abs(HeadingFilter.shortest(bearing!!.toDouble() - routeBearing)) <= (if (held) HELD_ANGLE else SNAP_ANGLE)
+        else position.away <= (if (held) HELD_SLOW_M else SNAP_SLOW_M)
         if (!ok) return null
         val length = route.cumulative[i + 1] - route.cumulative[i]
         val t = if (length <= 0.0) 0.0 else ((position.along - route.cumulative[i]) / length).coerceIn(0.0, 1.0)

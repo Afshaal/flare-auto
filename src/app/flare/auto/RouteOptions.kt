@@ -80,4 +80,18 @@ internal object RouteOptions {
         val lon = parts.getOrNull(1)?.toDoubleOrNull() ?: return null
         return if (parts.size == 2 && lat.isFinite() && lon.isFinite() && lat in -90.0..90.0 && lon in -180.0..180.0) lat to lon else null
     }
+
+    /**
+     * Which of [routes] a map tap at [lat], [lon] hit (within [tolerance] metres of its line), or null. Where routes
+     * run together (their shared start) the [selected] one wins unless another is clearly closer, so a tap on a
+     * shared road counts as the selected route.
+     */
+    fun tapped(routes: List<NavRoute>, selected: Int, lat: Double, lon: Double, tolerance: Double): Int? {
+        val away = routes.map { NavGeometry.nearest(it, lat, lon, 0, full = true).away }
+        val best = away.indices.filter { away[it] <= tolerance }.minByOrNull { away[it] } ?: return null
+        return if (selected in away.indices && away[selected] <= tolerance && away[selected] - away[best] < SHARED_M) selected else best
+    }
+
+    /** [tapped]: lines closer together than this (metres) at the tap are treated as the same road. */
+    private const val SHARED_M = 3.0
 }

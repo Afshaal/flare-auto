@@ -3,6 +3,7 @@ package app.flare.auto
 import android.animation.ValueAnimator
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.PointF
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Path
@@ -60,8 +61,6 @@ internal class VectorMapView(
     private var position: LatLng? = null
     private var heading: Double? = null
     private var destroyed = false
-    /** Remaining route for the fix the marker is still gliding to; drawn when it gets there. */
-    private var pendingAhead: DoubleArray? = null
     private var followZoomSet = false
     /** Following the vehicle (set by [follow], cleared by a map gesture, [flatten] or [overview]). */
     private var tracking = false
@@ -92,9 +91,22 @@ internal class VectorMapView(
         return try { texture(view)?.takeIf { it.isAvailable }?.bitmap } catch (_: RuntimeException) { null }
     }
 
+    /**
+     * The vehicle marker while following: an ordinary view pinned where the camera keeps the car. The map draws
+     * its own symbols a frame after the camera moves, so the map-drawn marker trailed and caught up with every glide
+     * step; pinned to the camera's own anchor it stays perfectly still. The map's marker is used when not following.
+     */
+    private val pinned = android.widget.ImageView(context).apply { visibility = GONE }
+    private val arrowBitmap by lazy { marker(true) }
+    private val dotBitmap by lazy { marker(false) }
+    /** The map-drawn marker is hidden (see [pinned]). */
+    private var mapMarkerHidden = false
+
     /** Called when the driver drags the map (the card stops following GPS). */
     var onUserMove: (() -> Unit)? = null
     var onLongPress: ((Double, Double) -> Unit)? = null
+    /** Map tap: latitude, longitude and the metres a finger's width covers there; true when the tap was used. */
+    var onTap: ((Double, Double, Double) -> Boolean)? = null
 
     init {
         MapLibre.getInstance(context.applicationContext)
@@ -103,6 +115,7 @@ internal class VectorMapView(
             .textureMode(true).attributionEnabled(false).logoEnabled(false).compassEnabled(false)
         view = MapView(context, options)
         addView(view, LayoutParams(MATCH, MATCH))
+        addView(pinned, LayoutParams((MARKER_DP * density).toInt(), (MARKER_DP * density).toInt(), Gravity.TOP or Gravity.START))
         addView(street, LayoutParams(WRAP, WRAP, Gravity.TOP or Gravity.START))
         view.onCreate(null)
         view.addOnDidFailLoadingMapListener { message -> if (!destroyed) onFailed(message ?: "style failed to load") }
@@ -122,9 +135,13 @@ internal class VectorMapView(
         m.setMaxZoomPreference(MAX_ZOOM)
         m.setLatLngBoundsForCameraTarget(LatLngBounds.from(bbox[2], bbox[3], bbox[0], bbox[1]))
         m.moveCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder().target(start).zoom(startZoom).build()))
-        m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) { tracking = false; onUserMove?.invoke() } }
-        m.addOnCameraMoveListener { placeStreet() }
+        m.addOnCameraMoveStartedListener { reason -> if (reason == MapLibreMap.OnCameraMoveStartedListener.REASON_API_GESTURE) { tracking = false; drawVehicle(); onUserMove?.invoke() } }
+        m.addOnCameraMoveListener { pinMarker(); placeStreet() }
         m.addOnMapLongClickListener { at -> onLongPress?.let { it(at.latitude, at.longitude); true } ?: false }
+        m.addOnMapClickListener { at ->
+            val tap = onTap ?: return@addOnMapClickListener false
+            tap(at.latitude, at.longitude, m.projection.getMetersPerPixelAtLatitude(at.latitude) * TAP_DP * density)
+        }
         val json = try {
             vector.style.readText().replace("{pack}", vector.style.parentFile!!.absolutePath.replace('\\', '/'))
                 .let { if (light) MapAppearance.lightStyle(it) else it }
@@ -153,25 +170,33 @@ internal class VectorMapView(
         s.addImage(DOT, marker(false))
         s.addSource(GeoJsonSource(ALTERNATIVES, EMPTY))
         s.addSource(GeoJsonSource(ROUTE, EMPTY))
+        s.addSource(GeoJsonSource(LEAD, EMPTY))
         s.addSource(GeoJsonSource(VEHICLE, EMPTY))
         val below = if (s.getLayer("road-label") != null) "road-label" else null
-        val casing = LineLayer("flare-route-casing", ROUTE).withProperties(
+        val casingStyle = arrayOf<org.maplibre.android.style.layers.PropertyValue<*>>(
             PropertyFactory.lineColor(ROUTE_CASING), PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineWidth(Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(),
                 Expression.stop(10, 4f), Expression.stop(14, 10f), Expression.stop(18, 26f))))
-        val line = LineLayer("flare-route", ROUTE).withProperties(
+        val lineStyle = arrayOf<org.maplibre.android.style.layers.PropertyValue<*>>(
             PropertyFactory.lineColor(ROUTE_COLOR), PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineWidth(Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(),
                 Expression.stop(10, 2.5f), Expression.stop(14, 7f), Expression.stop(18, 19f))))
+        val casing = LineLayer("flare-route-casing", ROUTE).withProperties(*casingStyle)
+        val line = LineLayer("flare-route", ROUTE).withProperties(*lineStyle)
         val gray = LineLayer("flare-alternatives", ALTERNATIVES).withProperties(
             PropertyFactory.lineColor(ALTERNATIVE_COLOR), PropertyFactory.lineCap(Property.LINE_CAP_ROUND),
             PropertyFactory.lineJoin(Property.LINE_JOIN_ROUND),
             PropertyFactory.lineWidth(Expression.interpolate(Expression.exponential(1.5f), Expression.zoom(),
                 Expression.stop(10, 2.5f), Expression.stop(14, 6f), Expression.stop(18, 16f))))
-        if (below != null) { s.addLayerBelow(gray, below); s.addLayerBelow(casing, below); s.addLayerBelow(line, below) }
-        else { s.addLayer(gray); s.addLayer(casing); s.addLayer(line) }
+        // The lead (marker to the start of the remaining route) is drawn exactly like the route.
+        val leadCasing = LineLayer("flare-route-lead-casing", LEAD).withProperties(*casingStyle)
+        val leadLine = LineLayer("flare-route-lead", LEAD).withProperties(*lineStyle)
+        if (below != null) {
+            s.addLayerBelow(gray, below); s.addLayerBelow(casing, below); s.addLayerBelow(leadCasing, below)
+            s.addLayerBelow(line, below); s.addLayerBelow(leadLine, below)
+        } else { s.addLayer(gray); s.addLayer(casing); s.addLayer(leadCasing); s.addLayer(line); s.addLayer(leadLine) }
         s.addLayer(SymbolLayer("flare-vehicle", VEHICLE).withProperties(
             PropertyFactory.iconImage(Expression.get("icon")), PropertyFactory.iconRotate(Expression.get("bearing")),
             PropertyFactory.iconRotationAlignment(Property.ICON_ROTATION_ALIGNMENT_MAP),
@@ -184,7 +209,7 @@ internal class VectorMapView(
         if (tracking && !followZoomSet) camera(false)
     }
 
-    fun showRoute(path: NavRoute?) { route = path; ahead = null; pendingAhead = null; drawRoute() }
+    fun showRoute(path: NavRoute?) { route = path; ahead = null; drawRoute(); drawLead() }
 
     /** Gray lines for alternative routes (lat,lon pairs each); empty removes them. */
     fun showAlternatives(lines: List<DoubleArray>) { alternatives = lines; drawAlternatives() }
@@ -216,6 +241,7 @@ internal class VectorMapView(
         if (minLat > maxLat) return
         tracking = false
         glide?.cancel()
+        drawVehicle()
         // Intercity routes need less than the browsing limit (packs have tiles from zoom 4); restored by [endOverview].
         m.setMinZoomPreference(OVERVIEW_MIN_ZOOM)
         val edge = (24 * density).toInt()
@@ -241,13 +267,23 @@ internal class VectorMapView(
     /** Only the part of the route ahead of the vehicle stays drawn ([NavGeometry.remaining]). */
     fun showRemaining(points: DoubleArray) {
         if (route == null) return
-        // While the marker glides to the new fix, keep the line from where it is shown (no gap ahead of the marker).
-        // A glide cut short by this fix had nearly reached the previous one: its line goes first (lag of one fix at most).
-        if (glide?.isRunning == true) { applyPendingAhead(); pendingAhead = points; return }
-        ahead = points; pendingAhead = null; drawRoute()
+        // Drawn at once from the new fix; the marker is still gliding towards it, and the lead joins the two, so the
+        // line always starts at the marker (it used to start at the previous fix, then jump when the glide ended).
+        ahead = points; drawRoute(); drawLead()
     }
 
-    private fun applyPendingAhead() { pendingAhead?.let { ahead = it; pendingAhead = null; drawRoute() } }
+    /**
+     * Short segment from the marker as drawn to the start of the remaining route. Redrawn with every glide frame
+     * (two points, cheap), so the visible line neither trails behind the marker nor leaves a gap in front of it.
+     */
+    private fun drawLead() {
+        val source = style?.getSourceAs<GeoJsonSource>(LEAD) ?: return
+        val points = ahead
+        val at = position
+        if (points == null || points.size < 2 || at == null) { source.setGeoJson(EMPTY); return }
+        source.setGeoJson("""{"type":"Feature","properties":{},"geometry":{"type":"LineString","coordinates":[""" +
+            "[${fmt(at.longitude)},${fmt(at.latitude)}],[${fmt(points[1])},${fmt(points[0])}]]}}")
+    }
 
     private fun drawRoute() {
         val source = style?.getSourceAs<GeoJsonSource>(ROUTE) ?: return
@@ -290,7 +326,7 @@ internal class VectorMapView(
         val from = position
         val fromHeading = this.heading
         // Parked (same position and heading): nothing to animate, so the GPU stays idle between fixes.
-        if (from != null && from.distanceTo(target) < 0.3 && heading == this.heading) { applyPendingAhead(); return }
+        if (from != null && from.distanceTo(target) < 0.3 && heading == this.heading) { drawLead(); return }
         val glideMs = if (from == null || !isShown) null else NavMotion.glide(gap, from.distanceTo(target))
         // Frames only as often as the picture visibly changes: wide views get one step per fix (see glideFrameMs).
         val frameMs = if (glideMs == null || from == null) null else {
@@ -302,7 +338,7 @@ internal class VectorMapView(
             NavMotion.glideFrameMs(glideMs, pixels, turn)
         }
         val duration = if (frameMs == null) null else glideMs
-        if (duration == null || from == null) { position = target; this.heading = heading; drawVehicle(); applyPendingAhead(); if (tracking) camera(false); return }
+        if (duration == null || from == null) { position = target; this.heading = heading; if (tracking) camera(false); drawVehicle(); drawLead(); return }
         val origin: LatLng = from
         glide = ValueAnimator.ofFloat(0f, 1f).apply {
             this.duration = duration
@@ -315,9 +351,9 @@ internal class VectorMapView(
                 lastFrameAt = frame
                 position = LatLng(origin.latitude + (target.latitude - origin.latitude) * f, origin.longitude + (target.longitude - origin.longitude) * f)
                 this@VectorMapView.heading = if (heading == null || fromHeading == null) heading else NavMotion.turn(fromHeading, heading, f)
-                drawVehicle()
-                if (f >= 1f) applyPendingAhead()
                 if (tracking) camera(false)
+                drawVehicle()
+                drawLead()
             }
             start()
         }
@@ -330,24 +366,62 @@ internal class VectorMapView(
             // Measured once per new name, not on every camera move (placeStreet runs each glide frame).
             fun spec(size: Int) = if (size > 0) MeasureSpec.makeMeasureSpec(size, MeasureSpec.AT_MOST) else MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED)
             street.measure(spec(width), spec(height))
+            labelPlaced = false
         }
-        street.visibility = if (name.isNullOrBlank()) GONE else VISIBLE
+        val visibility = if (name.isNullOrBlank()) GONE else VISIBLE
+        if (street.visibility != visibility) { street.visibility = visibility; labelPlaced = false }
         placeStreet()
     }
+
+    /** False until the label has a position for its current name (then it is placed without the steadying below). */
+    private var labelPlaced = false
 
     private fun placeStreet() {
         if (street.visibility != VISIBLE) return
         val m = map ?: return
         val at = position ?: return
-        val point = m.projection.toScreenLocation(at)
-        street.translationX = (point.x - street.measuredWidth / 2f).coerceIn(0f, maxOf(0f, (width - street.measuredWidth).toFloat()))
-        street.translationY = (point.y + MARKER_DP * density * 0.75f).coerceIn(0f, maxOf(0f, (height - street.measuredHeight).toFloat()))
+        // Following: under the pinned marker (the camera's anchor), so the label is as still as the marker.
+        val point = if (pinned.visibility == VISIBLE) PointF(pinned.translationX + MARKER_DP * density / 2, pinned.translationY + MARKER_DP * density / 2)
+            else m.projection.toScreenLocation(at)
+        val x = Math.round((point.x - street.measuredWidth / 2f).coerceIn(0f, maxOf(0f, (width - street.measuredWidth).toFloat()))).toFloat()
+        val y = Math.round((point.y + MARKER_DP * density * 0.75f).coerceIn(0f, maxOf(0f, (height - street.measuredHeight).toFloat()))).toFloat()
+        // Following, the marker stays put on screen, but projecting the moving position against the eased camera
+        // wobbles by a pixel or two each frame; ignore that so the text sits still. Real moves (panning) still apply.
+        val steady = 4 * density
+        if (labelPlaced && tracking && kotlin.math.abs(x - street.translationX) < steady && kotlin.math.abs(y - street.translationY) < steady) return
+        street.translationX = x; street.translationY = y; labelPlaced = true
+    }
+
+    /**
+     * Shows [pinned] at the camera's anchor while following (hiding the map's marker), or the map's marker otherwise.
+     * Heading-up, the map is turned to the heading so the arrow points straight up; north-up it turns with the heading.
+     */
+    private fun pinMarker() {
+        val m = map ?: return
+        val pin = tracking && position != null && !destroyed
+        if (pin != mapMarkerHidden) {
+            mapMarkerHidden = pin
+            style?.getLayer("flare-vehicle")?.setProperties(PropertyFactory.visibility(if (pin) Property.NONE else Property.VISIBLE))
+        }
+        if (!pin) { pinned.visibility = GONE; return }
+        val target = m.cameraPosition.target ?: return
+        val anchor = m.projection.toScreenLocation(target)
+        val camera = m.cameraPosition
+        pinned.setImageBitmap(if (heading == null) dotBitmap else arrowBitmap)
+        val size = MARKER_DP * density
+        pinned.translationX = Math.round(anchor.x - size / 2).toFloat()
+        pinned.translationY = Math.round(anchor.y - size / 2).toFloat()
+        pinned.rotation = if (heading == null) 0f else HeadingFilter.shortest((heading ?: 0.0) - camera.bearing).toFloat()
+        // Lying on the tilted road like the map-drawn marker: foreshortened by the camera tilt.
+        pinned.scaleY = Math.cos(Math.toRadians(camera.tilt)).toFloat().coerceIn(.5f, 1f) * PIN_PERSPECTIVE
+        pinned.visibility = VISIBLE
     }
 
     private fun drawVehicle() {
         val source = style?.getSourceAs<GeoJsonSource>(VEHICLE) ?: return
-        val at = position ?: run { source.setGeoJson(EMPTY); return }
+        val at = position ?: run { source.setGeoJson(EMPTY); pinMarker(); return }
         val icon = if (heading == null) DOT else ARROW
+        pinMarker()
         source.setGeoJson("""{"type":"Feature","properties":{"icon":"$icon","bearing":${fmt(heading ?: 0.0)}},""" +
             """"geometry":{"type":"Point","coordinates":[${fmt(at.longitude)},${fmt(at.latitude)}]}}""")
         placeStreet()
@@ -365,6 +439,7 @@ internal class VectorMapView(
         val started = !tracking || trackingHeadingUp != headingUp || !followZoomSet
         tracking = true
         trackingHeadingUp = headingUp
+        if (started) drawVehicle()
         // While following, [setVehicle] already moves the camera with each fix (glide frames or one step). Easing
         // towards the same place again on every fix kept the map redrawing almost continuously, even when parked,
         // which is what made the tilted 3D view lag; only starting to follow or switching orientation moves it here.
@@ -396,6 +471,7 @@ internal class VectorMapView(
     /** Flat north-up view around the current centre (leaving heading-up while not following). */
     fun flatten() {
         tracking = false
+        drawVehicle()
         val m = map ?: return
         m.easeCamera(CameraUpdateFactory.newCameraPosition(CameraPosition.Builder(m.cameraPosition).bearing(0.0).tilt(0.0)
             .padding(0.0, 0.0, 0.0, 0.0).build()), 400)
@@ -413,7 +489,7 @@ internal class VectorMapView(
         if (destroyed) return
         destroyed = true
         glide?.cancel(); glide = null
-        onUserMove = null; onLongPress = null; style = null; map = null
+        onUserMove = null; onLongPress = null; onTap = null; style = null; map = null
         try { view.onPause(); view.onStop(); view.onDestroy() } catch (_: RuntimeException) { }
         removeAllViews()
     }
@@ -449,6 +525,9 @@ internal class VectorMapView(
 
     companion object {
         private const val ROUTE = "flare-route-source"
+        private const val LEAD = "flare-route-lead-source"
+        /** A tap this close (dp) to a line counts as on it. */
+        private const val TAP_DP = 24f
         private const val ALTERNATIVES = "flare-alternatives-source"
         private const val ALTERNATIVE_COLOR = 0xff7d8794.toInt()
         private const val VEHICLE = "flare-vehicle-source"
@@ -468,6 +547,8 @@ internal class VectorMapView(
         const val WIDGET_FOLLOW_ZOOM = 16.9
         /** Vehicle marker diameter (44 dp in r2, 32 dp in r3, 23 dp in r4, 27 dp since the glide update). */
         const val MARKER_DP = 27
+        /** [pinMarker]: extra height factor so the pinned marker matches the map-drawn one under the camera tilt. */
+        private const val PIN_PERSPECTIVE = 1.12f
         private const val FOLLOW_MS = 950
         /** Camera moves longer than this are not animated. */
         private const val JUMP_M = 1500.0

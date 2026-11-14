@@ -72,6 +72,9 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     var onLocation:((Location)->Unit)?=null
     /** Long press on the map (latitude, longitude); null leaves long presses to the map. */
     var onLongPress:((Double,Double)->Unit)?=null
+    /** See [NavMap.onRouteTap]. */
+    private var routeTap:((Double,Double,Double)->Boolean)?=null
+    override fun onRouteTap(listener:((Double,Double,Double)->Boolean)?) { routeTap=listener }
     /** Full map: the search button. */
     var onSearch:(()->Unit)?=null
     /** Full map: spoken directions were switched on or off with the voice button. */
@@ -83,6 +86,11 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     private var overviewRoutes:List<NavRoute>?=null
     /** Route segment of the last snapped fix (search hint for [NavMotion.snap]). */
     private var snapSegment=0
+    /** The last fix was snapped to the route (wider limits keep the marker on the line, see [NavMotion.snap]). */
+    private var snapHeld=false
+    /** Where the 3D marker was last put for an unsnapped fix (see [steady]). */
+    private var steadyLat=Double.NaN
+    private var steadyLon=Double.NaN
     private var altLayers=ArrayList<org.mapsforge.map.layer.overlay.Polyline>()
     /** Mapsforge: street name under the centred marker while following. */
     private var streetLabel:TextView?=null
@@ -202,6 +210,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         if(preview) view.followZoom=VectorMapView.WIDGET_FOLLOW_ZOOM
         view.onUserMove={ follow=false }
         view.onLongPress={ lat2,lon2 -> onLongPress?.invoke(lat2,lon2) }
+        view.onTap={ lat2,lon2,metres -> routeTap?.invoke(lat2,lon2,metres) ?: false }
         // The route may have been set before this view existed (guidance restores it while the map loads).
         view.showRoute(route);ahead?.let { view.showRemaining(it) };view.showAlternatives(alternatives.map { it.points })
         overviewRoutes?.let { routes -> view.post { if(vectorMap===view) fitOverview(routes) } }
@@ -242,6 +251,15 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
             view.layerManager.layers.add(object:org.mapsforge.map.layer.Layer() {
                 override fun draw(b:org.mapsforge.core.model.BoundingBox?,z:Byte,c:org.mapsforge.core.graphics.Canvas?,o:org.mapsforge.core.model.Point?,r:org.mapsforge.core.model.Rotation?)=Unit
                 // Mapsforge passes null for positions it did not compute (seen: layerXY), so every parameter is nullable.
+                // A tap near a route line (route overview): metres for a 24 dp finger from the view's own projection.
+                override fun onTap(at:LatLong?,layerXY:org.mapsforge.core.model.Point?,tapXY:org.mapsforge.core.model.Point?):Boolean {
+                    val tap=routeTap ?: return false
+                    if(at==null || tapXY==null) return false
+                    val edge=view.mapViewProjection.fromPixels(tapXY.x+24*density,tapXY.y) ?: return false
+                    val metres=FloatArray(1)
+                    Location.distanceBetween(at.latitude,at.longitude,edge.latitude,edge.longitude,metres)
+                    return tap(at.latitude,at.longitude,metres[0].toDouble())
+                }
                 override fun onLongPress(at:LatLong?,layerXY:org.mapsforge.core.model.Point?,tapXY:org.mapsforge.core.model.Point?):Boolean {
                     val pick=onLongPress ?: return false
                     if(at==null) return false
@@ -415,9 +433,10 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         // On the route and clearly following it: draw the marker on the line (GPS and lane offsets hidden).
         val snapped=if(overviewRoutes!=null) null else NavMotion.snap(route,location.latitude,location.longitude,
             if(location.hasAccuracy()) location.accuracy else null,if(location.hasBearing()) location.bearing else null,
-            if(location.hasSpeed()) location.speed else null,snapSegment)
+            if(location.hasSpeed()) location.speed else null,snapSegment,snapHeld)
+        snapHeld=snapped!=null
         if(snapped!=null) snapSegment=snapped.segment
-        val street=snapped?.let { NavMotion.street(route,it.along) }
+        val street=heldStreet(snapped?.let { NavMotion.street(route,it.along) })
         vectorMap?.let { v -> vectorFix(v,location,snapped,street);return }
         val view=map ?: return
         val point=LatLong((snapped?.lat ?: location.latitude).coerceIn(-85.0,85.0),snapped?.lon ?: location.longitude)
@@ -433,6 +452,34 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         streetLabel?.let { it.text=street.orEmpty();it.visibility=if(centred && !street.isNullOrBlank()) View.VISIBLE else View.GONE }
         marker?.requestRedraw()
     }
+    /**
+     * Off the route and slow (or stopped): GPS wander smaller than the fix accuracy (at least [STEADY_M]) leaves the
+     * marker where it is, so a parked or crawling car's icon stays still. Driving, every fix moves it as before.
+     */
+    private fun steady(fix:Location):Pair<Double,Double> {
+        val slow=!fix.hasSpeed() || fix.speed < STEADY_SPEED
+        if(slow && !steadyLat.isNaN()) {
+            val result=FloatArray(1)
+            Location.distanceBetween(steadyLat,steadyLon,fix.latitude,fix.longitude,result)
+            if(result[0] < maxOf(STEADY_M,if(fix.hasAccuracy()) fix.accuracy*.75f else 0f)) return steadyLat to steadyLon
+        }
+        steadyLat=fix.latitude;steadyLon=fix.longitude
+        return steadyLat to steadyLon
+    }
+    /** Street name last shown under the marker and when it was last confirmed (see [heldStreet]). */
+    private var shownStreet:String?=null
+    private var streetAt=0L
+    /**
+     * The street for this fix, or the last one for up to [STREET_HOLD_MS]: fixes that do not snap to the route (GPS
+     * noise, "off route · recalculating", the first fixes on a new route) no longer hide the label for a few seconds
+     * and bring it back. Longer than that without a match, the label goes.
+     */
+    private fun heldStreet(street:String?):String? {
+        val now=android.os.SystemClock.elapsedRealtime()
+        if(street!=null) { shownStreet=street;streetAt=now;return street }
+        if(shownStreet!=null && now-streetAt<=STREET_HOLD_MS) return shownStreet
+        shownStreet=null;return null
+    }
     private fun vectorFix(v:VectorMapView,fix:Location,snapped:NavMotion.Snapped?=null,street:String?=null) {
         val box=vectorBox ?: return
         if(!(fix.latitude in box[0]..box[2] && fix.longitude in box[1]..box[3])) { setStatus("GPS position is outside the saved coverage");return }
@@ -441,7 +488,8 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         lastFix=fix
         val direction=heading.update(fix.latitude,fix.longitude,if(fix.hasBearing()) fix.bearing else null,
             if(fix.hasSpeed()) fix.speed else null,if(fix.hasAccuracy()) fix.accuracy else null)
-        v.setVehicle(snapped?.lat ?: fix.latitude,snapped?.lon ?: fix.longitude,if(snapped!=null && direction!=null) snapped.bearing else direction)
+        val (lat,lon)=if(snapped!=null) { steadyLat=Double.NaN;snapped.lat to snapped.lon } else steady(fix)
+        v.setVehicle(lat,lon,if(snapped!=null && direction!=null) snapped.bearing else direction)
         v.setStreet(if(preview) null else street) // Home widget: no room under the marker (the trip bar is there)
         if(follow && overviewRoutes==null) v.follow(headingUp(),!first)
     }
@@ -460,7 +508,7 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
         showStill()
     }
     /** Shows [path] as a line under the position marker, or removes it (null). Survives map reloads. */
-    override fun showRoute(path:NavRoute?) { route=path;ahead=null;snapSegment=0;drawRoute() }
+    override fun showRoute(path:NavRoute?) { route=path;ahead=null;snapSegment=0;snapHeld=false;drawRoute() }
     /** Gray alternative routes; empty removes them. */
     override fun showAlternatives(routes:List<NavRoute>) {
         alternatives=routes
@@ -548,6 +596,10 @@ internal class OfflineMapCard(private val a:Activity,c:Context,private val sampl
     override fun center():Pair<Double,Double> = vectorMap?.center() ?: (map?.model?.mapViewPosition?.center ?: lastCenter).let { it.latitude to it.longitude }
     companion object {
         private var initialized=false
+        private const val STREET_HOLD_MS=8000L
+        /** [steady]: metres of GPS wander ignored, and below which speed (m/s, ~5 km/h). */
+        private const val STEADY_M=5f
+        private const val STEADY_SPEED=1.5f
         /** See [still]; replaced, never recycled here, since an ImageView may still be drawing the previous one. */
         private var lastFrame:android.graphics.Bitmap?=null
         private const val ROUTE_COLOR=0xcc39bed8.toInt()

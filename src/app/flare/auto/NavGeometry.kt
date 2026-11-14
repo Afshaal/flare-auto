@@ -25,7 +25,8 @@ internal object NavGeometry {
         for(i in 1 until result.size) result[i]=result[i-1]+distance(points[(i-1)*2],points[(i-1)*2+1],points[i*2],points[i*2+1])
         return result
     }
-    fun nearest(route:NavRoute,lat:Double,lon:Double,previous:Int):Position {
+    /** [full]: search the whole route (a tap on the map), not just around [previous] (driving along it). */
+    fun nearest(route:NavRoute,lat:Double,lon:Double,previous:Int,full:Boolean=false):Position {
         val points=route.points;val count=points.size/2
         if(count<2) return Position(0,0.0,Double.POSITIVE_INFINITY)
         val xScale=111320*cos(Math.toRadians(lat));val yScale=111320.0
@@ -41,6 +42,7 @@ internal object NavGeometry {
             }
             return Position(segment,along,sqrt(best))
         }
+        if(full) return scan(0,count-2)
         val nearby=scan((previous-15).coerceIn(0,count-2),(previous+160).coerceIn(0,count-2))
         return if(nearby.away<=100) nearby else scan(0,count-2)
     }

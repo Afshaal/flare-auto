@@ -34,6 +34,10 @@ class NavMotionTest {
         assertNotNull(NavMotion.snap(r, 31.5045, 74.30 + 4 * metreLon, 8f, null, 0f, 0))
         assertNull(NavMotion.snap(r, 31.5045, 74.30 + 9 * metreLon, 8f, null, 0f, 0))
         assertNull(NavMotion.snap(null, 31.5045, 74.30, 5f, 0f, 10f, 0))
+        // Already on the route: a fix 14 m off (outside the 8-12 m entry limit) stays snapped; far off still lets go.
+        assertNull(NavMotion.snap(r, 31.5045, 74.30 + 14 * metreLon, 6f, 0f, 10f, 0))
+        assertNotNull(NavMotion.snap(r, 31.5045, 74.30 + 14 * metreLon, 6f, 0f, 10f, 0, held = true))
+        assertNull(NavMotion.snap(r, 31.5045, 74.30 + 40 * metreLon, 6f, 0f, 10f, 0, held = true))
     }
 
     @Test
@@ -96,5 +100,21 @@ class NavMotionTest {
         val late = NavMotion.divergesAt(chosen, NavRoute(jog, NavGeometry.cumulative(jog), emptyList(), 1300.0, 70_000))
         assertNotNull(late)
         assertTrue("split near 800 m: $late", late!! in 780.0..920.0)
+    }
+
+    @Test
+    fun mapTapPicksTheRouteUnderTheFinger() {
+        val a = north()
+        // Same start, then 100 m further east for its second half.
+        val shifted = a.points.copyOf().also { for (i in 12 until it.size step 2) it[i + 1] = 74.30 + 100 * metreLon }
+        val b = NavRoute(shifted, NavGeometry.cumulative(shifted), a.steps, a.distance, a.millis)
+        val routes = listOf(a, b)
+        // On b's own stretch: b, whichever is selected.
+        assertEquals(1, RouteOptions.tapped(routes, 0, 31.5072, 74.30 + 98 * metreLon, 20.0))
+        // On the shared start: the selected route.
+        assertEquals(1, RouteOptions.tapped(routes, 1, 31.5009, 74.30, 20.0))
+        assertEquals(0, RouteOptions.tapped(routes, 0, 31.5009, 74.30, 20.0))
+        // Away from both lines: nothing.
+        assertNull(RouteOptions.tapped(routes, 0, 31.5072, 74.30 + 50 * metreLon, 20.0))
     }
 }

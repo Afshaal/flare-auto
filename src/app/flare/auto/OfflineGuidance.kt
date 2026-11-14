@@ -18,6 +18,11 @@ internal interface NavMap {
     fun showAlternatives(routes: List<NavRoute>) {}
     /** Flat overview fitting [routes] after a destination is chosen; null returns to following the vehicle. */
     fun overview(routes: List<NavRoute>?) {}
+    /**
+     * Taps on the map go to [listener] (latitude, longitude, how many metres off still counts as on a line); it
+     * returns true when it used the tap. Null stops it.
+     */
+    fun onRouteTap(listener: ((Double, Double, Double) -> Boolean)?) {}
 }
 
 /**
@@ -48,7 +53,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
     val turnCard=TurnCard(c,compact)
     val tripCard=TripCard(c,compact)
     /** Full map: route overview after choosing a destination (options and Start). */
-    val optionsCard=RouteListCard(c,"Routes","Start")
+    val optionsCard=RouteListCard(c,"Routes · tap one on the map, tap again to start","Start")
     /** Full map while driving: the other routes computed with the chosen one, with their ETA comparison. */
     val alternativesCard=RouteListCard(c,"Other routes",null)
     /** Alternatives still ahead of their split from the chosen route ([NavMotion.divergesAt]). */
@@ -194,6 +199,12 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
         map.overview(found)
         optionsCard.onPick={ i-> if(options===found) { selected=i;showSelected() } }
         optionsCard.onAction={ if(options===found) pick(selected) }
+        // On the map: a tap on a gray route selects it, a tap on the selected (blue) one starts guidance on it.
+        map.onRouteTap { lat,lon,tolerance-> if(options!==found) false else {
+            val hit=RouteOptions.tapped(found,selected,lat,lon,tolerance)
+            if(hit!=null) { if(hit==selected) pick(hit) else { selected=hit;showSelected() } }
+            hit!=null
+        } }
         optionsCard.show(RouteOptions.summaries(found) { eta(it,0.0,it.distance) },0)
     }
 
@@ -224,7 +235,7 @@ internal class OfflineGuidance(private val a:Activity,c:Context,private val pack
 
     private fun endOverview() {
         if(options==null) return
-        options=null;optionsDest=null;optionsFrom=null;optionsCard.hide();map.overview(null)
+        options=null;optionsDest=null;optionsFrom=null;optionsCard.hide();map.onRouteTap(null);map.overview(null)
     }
 
     private fun clearAlternatives() { if(alternatives.isNotEmpty()) { alternatives=emptyList();showAlternatives() } }
