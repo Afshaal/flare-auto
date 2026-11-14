@@ -3,8 +3,8 @@
 ## Before every release
 
 1. **License.** Read [LICENSING.md](LICENSING.md); the Dashline-derived files make the APK GPL-3.0-only as a whole.
-2. **Personal defaults.** `src/app/flare/auto/KnownApps.kt` › `Defaults` holds the vehicle name (`CIVIC`) and trim
-   badge (`RS`). Set them to `""` for a generic build; empty values hide the labels (already handled in code).
+2. **Vehicle labels.** `Defaults` in `src/app/flare/auto/KnownApps.kt` is empty (generic build); earlier
+   installs keep CIVIC / RS through `ProfileStore.keepVehicleLabels`.
 3. **Brand marks.** Review the trademark use listed in LICENSING.md (CarPlay / Android Auto buttons).
 4. **Version.** Bump `versionCode` and `versionName` in `app/build.gradle.kts` (the manifest no longer repeats them).
    The in-app updater only offers APKs with a higher version code and the same signing key.
@@ -28,7 +28,7 @@
    adb logcat -s FlareChecks FlareNav
    ```
    Then reinstall the signed release build.
-8. **Device test** on the head unit: see "On-device test checklist" in `OPTIMIZATION-REPORT.md`.
+8. **Device test** on the head unit: Home, editor, dock, map, navigation and an update over the previous release.
 9. **Navigation pack.** Build it with `flare-lahore-tools` (`./build-lahore.sh`); it is *not* in the APK. If you publish it,
    keep `build-info.json` and the ODbL notice with it (see LICENSING.md).
 10. **GitHub release.** Attach the signed APK. `UpdateChecker` only accepts assets under

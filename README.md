@@ -1,155 +1,67 @@
 <div align="center">
-  <img src="docs/flare-auto-icon.svg" width="256" height="256" alt="Flare Auto icon" />
+  <img src="docs/flare-auto-icon.svg" width="160" height="160" alt="Flare Auto icon" />
   <h1>Flare Auto</h1>
-  <p><strong>An open-source launcher designed for car head units.</strong></p>
+  <p><strong>An open-source launcher for Android car head units.</strong></p>
   <p>
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL--3.0--only-blue.svg" alt="License: GPL-3.0-only" /></a>
-    <a href="https://github.com/Afshaal/flare-auto/pulls"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="Pull requests welcome" /></a>
+    <a href="https://github.com/Afshaal/flare-auto/releases/latest"><img src="https://img.shields.io/github/v/release/Afshaal/flare-auto" alt="Latest release" /></a>
   </p>
 </div>
 
-Flare Auto runs on the head unit itself. CarPlay and Android Auto require a separate compatible app and hardware.
-
----
-
-## The dashboard
-
-The home screen brings together a clock, date, optional weather or sunrise/sunset information, connection indicators and a media card. Choose which cards appear, swap their positions, adjust the split, and configure the bottom dock with your preferred shortcuts.
-
-The media card can show the current track, artist, artwork and playback controls when a compatible app provides them. The app drawer supports hidden apps, icon packs and individual custom icons.
-
-## Screenshots
-
-| Dark red theme | Dark teal theme |
+| | |
 | --- | --- |
-| ![Flare Auto home screen with red accents](docs/screenshots/home-current.png) | ![Flare Auto home screen with teal accents](docs/screenshots/home-second.png) |
-
-Screenshots show a demonstration media track and artwork.
-
----
+| ![Side dock, dark theme](docs/screenshots/side-dock-dark.png) | ![Side dock, light theme](docs/screenshots/side-dock-light.png) |
+| ![Bottom dock with map](docs/screenshots/bottom-dock-map.png) | ![Clock, weather and media](docs/screenshots/clock-weather-media.png) |
 
 ## Features
 
-**Home screen**
+- **Home pages** built from widgets on a grid: clocks, media, weather, offline map, CarPlay / Android Auto shortcuts and app shortcuts.
+- **Dock** at the bottom, left or right, with your own shortcuts.
+- **Offline map** on Home and full screen, in 2D or tilted 3D, with dark and light styles.
+- **Offline navigation** with a separate navigation pack: search, route choices, turn-by-turn and spoken directions.
+- **Themes** with dark and light modes, accent colours, wallpapers or your own images.
+- **Profiles** for different drivers, a screensaver, icon packs and hidden apps.
+- **No account, no tracking.** Weather and update checks are optional and off until you use them.
 
-- Configurable clock, media and app-shortcut cards; adjust card positions and split.
-- Media title, artist, artwork, playback controls and seek bar when supported by the source.
-- Customizable dock, shortcut order, labels and app assignments.
-- Wi-Fi, Bluetooth and supported cellular indicators.
-- Interactive Home customization: hold cards to change or swap them, configure corner widgets, and arrange dock shortcuts.
-- Separate vehicle-name and trim-badge colors, clock styles, and Home/app-drawer/settings scale controls.
+## Install
 
-**Make it yours**
+1. Download the APK from the [latest release](https://github.com/Afshaal/flare-auto/releases/latest).
+2. Open it on the head unit and allow the install.
+3. Set Flare Auto as the default Home app.
 
-- Three light palettes (Daylight Silver, Warm Ivory, Cool Pearl), dark/light selection, and automatic switching at configurable device-local hours under Appearance (default 07:00–19:00). Theme selection remembers separate light/dark palettes; selecting a palette keeps Automatic mode enabled.
+Updates install over the previous version and keep your settings.
 
-- Dark themes, accent color, optional glass-style cards and gradient wallpapers.
-- Custom images for Home, the app drawer and screensaver.
-- Changeable vehicle label and badge text.
-- App drawer with hidden apps, installed icon-pack support and individual icon choices.
-- Clock or image screensaver with an optional idle timeout and selectable clock styles.
-- One wallpaper collection for Home, the app drawer and screensaver, with independent flip controls for gradients.
-- Optional animations and drawer pages that follow a swipe with a gentle fade.
+Needs Android 8.0 or newer, landscape. CarPlay and Android Auto need their own apps and hardware.
 
-**Startup**
-
-- Optionally launch an app or the screensaver after startup.
-- Choose a radio or Bluetooth startup source where the head unit supports it, or leave the source to the system.
-
-**Optional online features**
-
-- Enable hourly weather forecasts to download and cache them for offline use. Choose an offline age limit (two days by default); expired or unavailable forecasts fall back to sunrise/sunset.
-- Use **Check for updates** button to check the latest stable GitHub release manually. There are no automatic update checks.
-
-| | |
-| --- | --- |
-| Minimum Android | Android 8.0 (API 26) |
-| Target Android | Android 9 (API 28) |
-| Orientation | Landscape |
-| Network | Not required for launcher operation |
-| Validation | v1.1.0 on an Android 9 head unit |
-
-Other devices may behave differently. Vendor specific shortcuts and startup source selection depend on the head unit and installed apps.
-
-## Installation
-
-1. Download the APK attached to the GitHub release and copy it to a USB drive or another accessible location on the head unit.
-2. Open the APK with the head unitâ€™s file manager and follow Androidâ€™s installation prompts.
-3. Open Flare Auto and select it as the default Home app when prompted, or use the **Default launcher** option in Launcher settings.
-4. Configure app shortcuts in Launcher settings. Grant **Media access** to display supported media sessions, and grant location access or enter coordinates for sunrise and sunset.
-
-## Recommended setup
-
-Flare Auto is designed primarily for low-performance Android head units with limited RAM. On these devices, disabling Android's interface animations can make navigation feel quicker.
-
-### CarPlay and Android Auto
-
-Flare Auto provides shortcuts to projection apps; it does not provide CarPlay or Android Auto itself.
-
-- **Apple CarPlay:** Try [DiPlay](https://github.com/shihabal3amri/DiPlay) on compatible head units.
-- **Android Auto:** Try [DiAuto](https://github.com/shihabal3amri/DiAuto) on compatible head units.
-
-Install the appropriate app on the head unit, then assign it to the matching shortcut in **Launcher settings**. Already using ZLink or another compatible projection app? Assign it to the CarPlay or Android Auto button in Launcher settings. The button opens the selected app; connection and compatibility depend on that app and the head unit.
-
-### Performance
-
-If you're comfortable with ADB, review preinstalled apps and disable ones you've confirmed are unnecessary. Record your changes so you can reverse them, and test radio, Bluetooth and the backup camera afterward. System packages vary by device, so avoid applying a generic removal list.
-
-## Roadmap
-
-v1.1.0 completes the Kotlin migration and adds optional animations, weather caching, and expanded customization. Future work will keep the launcher lightweight for lower-performance head units.
-
-- **More home-screen widgets:** Additional cards and options for arranging them.
-- **Better media handling:** Improve source selection and investigate artwork disappearing after switching to Bluetooth.
-- **More personalization:** Additional ways to configure shortcuts, icons, and card layouts.
-- **Setup improvements:** Make permissions and first-time configuration easier to understand.
-- **Performance:** Continue reducing unnecessary background work and memory use.
-
-These are planned features and may change.
-
-## Permissions and privacy
-
-The launcher requests location for solar times and optional weather, network state for connection indicators, and Bluetooth access for status. Media access is optional and requires the Android notification-listener setting. Solar times use the last known device location or manually entered coordinates; when neither is available, the display shows `--:--`. The device time zone is used.
-
-Weather is disabled by default. When enabled, the selected coordinates are sent to [Open-Meteo](https://open-meteo.com/) to download an hourly forecast; cached forecasts remain usable offline within the selected age limit. Manual update checks contact the public GitHub release API. APK downloads occur only after you choose Download; Android may ask you to allow installation from Flare Auto. No GitHub login or token is required in the app.
-
-## Known limitations
-
-- Switching to the head unit's Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
-- Radio, Bluetooth, CarPlay and Android Auto shortcuts launch other apps; availability and behavior depend on the device.
-- Initial source selection and startup actions are vendor-dependent.
-- Sunset-based dimming is inactive when no solar location is available.
-
-## Build from source
-
-The project uses the Gradle wrapper, the Android Gradle Plugin, and the Kotlin Android plugin. The app uses Android framework APIs directly and does not depend on AndroidX.
-
-### Prerequisites
-
-- JDK 17 or newer.
-- Android SDK Platform 35 and the Android SDK Build-Tools installed through Android Studio or `sdkmanager`.
-- Set `ANDROID_HOME` or `ANDROID_SDK_ROOT` to the SDK location if it is not in the default location.
-
-The Gradle wrapper downloads Gradle and the declared build plugins on first use. Build a debug APK with:
+## Build
 
 ```sh
-./gradlew assembleDebug
+./gradlew assembleRelease testDebugUnitTest lintDebug
 ```
 
-The APK is written to `app/build/outputs/apk/debug/app-debug.apk`. Run the available local JVM tests with:
+Signing: copy `keystore.properties.example` to `keystore.properties`. Never commit keys or passwords.
 
-```sh
-./gradlew testDebugUnitTest
-```
+## License
 
-All application sources and tests are Kotlin. Source files, resources, assets, manifest permissions and launcher behavior remain in the repository's existing top-level directories.
+GPL-3.0-only. See [LICENSE](LICENSE). Licence details: [docs/LICENSING.md](docs/LICENSING.md).
 
-An APK signed with a different key cannot update an existing installation. Uninstalling the existing app can remove its data. Keep signing keys private.
+## Contributions and credits
 
-## Credits and license
+Pull requests and issues are welcome.
 
-Copyright © 2026 Afshaal Flare Auto. Licensed under GPL-3.0-only. Third-party components retain their respective copyrights.
+- **Author:** [Afshaal](https://github.com/Afshaal)
+- **Dashline** by Metehan Kaygisiz: media session and playback control code (GPL-3.0-only)
+- **720pixel free-gradient-tools:** wallpaper gradients (MIT); see [GRADIENT-ATTRIBUTION.md](GRADIENT-ATTRIBUTION.md)
+- **MapLibre Native** 13.0.2: 3D vector map (BSD-2-Clause), with its Apache-2.0 dependencies
+- **Mapsforge** 0.25.0: 2D map renderer (LGPL-3.0 with linking exception)
+- **AndroidSVG** 1.4 (Apache-2.0)
+- **GraphHopper** 1.0: offline routing (Apache-2.0), with HPPC, Commons IO, XML Graphics Commons (Apache-2.0), JTS (EDL-1.0) and SLF4J (MIT)
+- **Planetiler:** vector tile builds (Apache-2.0, build tool only)
+- **Noto Sans and Noto Sans Arabic:** map labels (SIL Open Font License 1.1)
+- **OpenStreetMap** contributors: map, routing and search data (ODbL 1.0)
+- **Open-Meteo:** optional weather forecasts (CC BY 4.0)
+- **Kotlin** standard library (Apache-2.0)
 
-Flare Auto includes media-session code adapted from [Dashline](https://github.com/metehankaygsz/dashline), copyright 2026 Metehan Kaygisiz, GPL-3.0-only. See [LICENSE](LICENSE) and [CREDITS.md](CREDITS.md).
+Full notices: [CREDITS.md](CREDITS.md) and in the app under **Settings › About › Open-source credits**.
 
-Gradient credits are in [GRADIENT-ATTRIBUTION.md](GRADIENT-ATTRIBUTION.md). Drawer icons are the apps' own installed icons (no brand artwork is bundled). Brand names and marks belong to their respective owners; their inclusion does not imply affiliation or endorsement. Review rights to bundled brand artwork before distribution.
+Apple CarPlay and Android Auto are trademarks of their owners; they are named only to identify apps. Flare Auto is not affiliated with them.

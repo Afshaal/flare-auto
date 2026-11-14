@@ -1,29 +1,27 @@
 # Flare Auto v1.2.0
 
-Draft notes for the GitHub release. The release has not been published yet.
+Installs over v1.1.0 and keeps your settings.
 
-## Added
+## New
 
-- Offline Lahore navigation: street map, destination search, driving routes and turn-by-turn guidance with
-  optional offline spoken directions. Everything runs on the head unit with no internet. It needs the separate
-  Lahore navigation pack built with `flare-lahore-tools` (not inside the APK).
-- Long-press a point on the offline map to drive there.
-- Three-card and map Home layout presets in the Home editor.
+- **Home editor:** build Home pages from widgets on a grid, with ready-made layouts and per-widget clock styles.
+- **New widgets:** offline map, album and compact players, gauge, split and weather clocks, compact and wide weather.
+- **Dock placement:** bottom, left or right. Side docks show the clock, signal and Wi-Fi, three shortcuts and Apps.
+- **Offline map:** 2D or tilted 3D map, dark and light styles, on Home and full screen.
+- **Offline navigation** (needs a navigation pack, not included): search, route choices you can tap on the map,
+  turn-by-turn, spoken directions, rerouting and optional traffic-adjusted arrival times.
+- **Dark / Light mode** buttons that apply a matching theme and wallpaper.
+- **Profiles** for different drivers.
 
 ## Improved
 
-- Turn instructions use English street names where OpenStreetMap has them (pack revision 2). Urdu-only street
-  names are left out of the spoken instruction.
-- A saved destination that is waiting for GPS can be stopped from the navigation panel.
-- Screens go back to full screen after a dialog closes.
-- The map credit no longer overlaps the scale bar or zoom buttons.
-- Smaller release APK (R8 shrinking) and lint-clean build.
+- Smoother Home page swipes, including with a live map.
+- Steady navigation marker and street name; the route line starts at the car.
+- Closer map zoom is limited so streets stay visible.
+- Smaller APK and many small fixes.
 
-## Validation and known limitations
+## Changed
 
-Tested in BlueStacks: map viewing, search, routing, simulated GPS drives with arrival and off-route
-recalculation, restore after restart, profiles, Home editor presets, app widgets, and an update from 1.1.0 that
-kept all settings. Not yet tested on the Civic: spoken directions, real GPS behaviour, and long drives.
-At a standstill on a divided road the first instruction can be "make a U-turn" until the car moves.
+- New installs no longer show a vehicle name or trim badge until you set one. Existing installs keep theirs.
 
-Map data © OpenStreetMap contributors, ODbL. Existing settings and the app signing key are kept.
+Map data © OpenStreetMap contributors (ODbL). Optional weather by Open-Meteo (CC BY 4.0).
