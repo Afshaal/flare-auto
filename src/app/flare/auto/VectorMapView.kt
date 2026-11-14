@@ -538,8 +538,11 @@ internal class VectorMapView(
         private const val ROUTE_CASING = 0xff1f4fae.toInt()
         private const val MARKER_COLOR = 0xff2f7dff.toInt()
         const val HEADING_TILT = 55.0
-        /** Closest zoom (tiles stop at z15 and are over-zoomed; streets stay sharp as vectors). */
-        const val MAX_ZOOM = 20.5
+        /**
+         * Closest zoom (tiles stop at z15 and are over-zoomed). Two zoom-button steps short of the old 20.5: closer
+         * than this the map showed little but the route.
+         */
+        const val MAX_ZOOM = 18.5
         private const val MIN_ZOOM = 8.0
         private const val OVERVIEW_MIN_ZOOM = 4.0
         /** Default following zoom: full map; the Home widget uses [WIDGET_FOLLOW_ZOOM] (smaller view, a bit wider). */
