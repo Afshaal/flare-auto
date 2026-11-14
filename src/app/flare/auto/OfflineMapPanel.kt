@@ -46,6 +46,8 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
         row("Navigation pack",{ packValue() }) { choosePack() }
         // A pack ZIP from Downloads or USB, extracted and verified in the app (PackImport).
         row("Import navigation pack",{ PackImport.status.ifBlank { "ZIP from Downloads or USB" } }) { importPack() }
+        // Packs linked from the project README on GitHub, downloaded and imported in the app (MapPackDownload).
+        row("Download map pack",{ "Lahore, Kuwait and others from GitHub" }) { downloadPack() }
         row("Map renderer",{ rendererValue() }) { chooseRenderer() }
         // MapLibre · 3D only.
         val orientation=row("Map orientation",{ if(p.getBoolean(Keys.OFFLINE_MAP_HEADING_UP,true)) "Heading-up 3D" else "North-up" }) {
@@ -304,6 +306,31 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
                         .putExtra(Intent.EXTRA_MIME_TYPES,arrayOf("application/zip","application/x-zip-compressed","application/octet-stream")),PICK_PACK)
                 } catch(_:android.content.ActivityNotFoundException) { Toast.makeText(a,"No file picker is available",Toast.LENGTH_LONG).show() }
             }.setNegativeButton("Cancel",null).show()
+    }
+    /** Lists the packs linked from the README on GitHub; the chosen one is downloaded, then imported and checked. */
+    private fun downloadPack() {
+        if(PackImport.busy || MapPackDownload.busy) { importPack();return }
+        val wait=ThemedDialogs.Builder(a).setTitle("Download map pack").setMessage("Getting the list from GitHub…")
+            .setNegativeButton("Cancel",null).show()
+        MapPackDownload.list { links,error->
+            if(!wait.isShowing || a.isDestroyed) return@list
+            wait.dismiss()
+            if(links==null) { ThemedDialogs.Builder(a).setTitle("Download map pack").setMessage("Could not get the list: $error\n\nCheck the internet connection.").setPositiveButton("Close",null).show();return@list }
+            if(links.isEmpty()) { ThemedDialogs.Builder(a).setTitle("Download map pack").setMessage("No map packs are listed on GitHub right now.").setPositiveButton("Close",null).show();return@list }
+            ThemedDialogs.Builder(a).setTitle("Download map pack").setItems(links.map { it.name }.toTypedArray()) { _,i->
+                val link=links[i]
+                ThemedDialogs.Builder(a).setTitle(link.name)
+                    .setMessage("Download this pack from GitHub (about 50 MB) and install it? A pack for the same region replaces the installed one only after every file is checked.")
+                    .setPositiveButton("Download") { _,_->
+                        val box=ThemedDialogs.Builder(a).setTitle(link.name).setMessage("Starting download…")
+                            .setNegativeButton("Cancel") { _,_->MapPackDownload.cancel();PackImport.cancel() }.show()
+                        MapPackDownload.download(a,link,{ text-> if(box.isShowing) box.setMessage(text) }) { ok,message->
+                            if(box.isShowing) box.dismiss()
+                            packImportDone(ok,message)
+                        }
+                    }.setNegativeButton("Cancel",null).show()
+            }.setNegativeButton("Cancel",null).show()
+        }
     }
     /** Result of [PackImport] (on the main thread): reload the pack list and selection, and say what happened. */
     fun packImportDone(ok:Boolean,message:String) {

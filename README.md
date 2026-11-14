@@ -41,7 +41,8 @@ Offline navigation needs a navigation pack:
 - [Lahore map pack (r7)](https://github.com/Afshaal/flare-auto/releases/download/v1.2.1/FlareAuto-Lahore-pack-r7.zip)
 - [Kuwait map pack (r1)](https://github.com/Afshaal/flare-auto/releases/download/v1.2.1/FlareAuto-Kuwait-pack-r1.zip)
 
-Copy the ZIP to the head unit and choose **Settings › Offline maps › Import navigation pack**. Each pack's
+In the app, choose **Settings › Offline maps › Download map pack**. Or copy the ZIP to the head unit and choose
+**Settings › Offline maps › Import navigation pack**. Each pack's
 `NOTICE.md` lists its data sources.
 
 ## Build
