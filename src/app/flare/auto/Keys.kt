@@ -143,8 +143,8 @@ internal object Keys {
     const val OFFLINE_NAV_VIA = "offline_nav_via"
     /** Planned length (metres) of the current journey, fixed when it starts and kept on reroutes ([TrafficEta]). */
     const val OFFLINE_NAV_TRIP_M = "offline_nav_trip_m"
-    /** Typical traffic adjustment of arrival estimates ([TrafficEta]): on/off (default off), peak multiplier in
-     *  tenths (default 20 = 2.0x), "HH:MM-HH:MM" windows, school window on/off, weekday bitmask (bit 0 = Monday). */
+    /** Peak hours in arrival estimates ([TrafficEta]): on/off (default on since 1.2.2), "HH:MM-HH:MM" windows and the
+     *  weekday bitmask (bit 0 = Monday). The peak multiplier and school keys are no longer read (kept, not renamed). */
     const val OFFLINE_ETA_TRAFFIC = "offline_eta_traffic"
     const val OFFLINE_ETA_PEAK = "offline_eta_peak"
     const val OFFLINE_ETA_MORNING = "offline_eta_morning"

@@ -99,29 +99,27 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
     }
 
     /**
-     * Typical traffic adjustment ([TrafficEta]): off by default; its details show only while it is on. These are
-     * delays the driver sets for two local areas, not live traffic, and they never change the chosen route.
+     * Peak hours ([TrafficEta]): on by default. Arrival estimates always use the road speeds; this adds the peak-hour
+     * multiplier in the morning and evening windows. Not live traffic; routes are not changed.
      */
     private fun trafficSettings(row:(String,()->String,()->Unit)->android.view.View, visible:(android.view.View,Boolean)->Unit) {
         fun s()=TrafficEta.read(p)
-        val traffic=ui.toggle("Typical traffic adjustment",s().enabled,Runnable {
+        val traffic=ui.toggle("Peak hours in arrival times",s().enabled,Runnable {
             p.edit().putBoolean(Keys.OFFLINE_ETA_TRAFFIC,!s().enabled).apply();refresh()
         })
         ui.add(group,traffic)
-        // The details live in their own panel; switching the adjustment on does not unfold them here.
-        val advanced=row("Advanced settings",{ trafficSummary(s()) }) { trafficPanel() }
+        val advanced=row("Peak hours and speeds",{ trafficSummary(s()) }) { trafficPanel() }
         refreshers.add {
             val st=s()
-            traffic.setChecked(st.enabled,"Typical traffic adjustment")
+            traffic.setChecked(st.enabled,"Peak hours in arrival times")
             advanced.alpha=if(st.enabled) 1f else .6f
         }
     }
 
-    /** "2.0× · Mon–Fri · school on" (the configuration in one line). */
-    private fun trafficSummary(s:TrafficEta.Settings)=
-        "%.1f× · %s · school %s".format(java.util.Locale.US,s.peak,dayLabel(s.days,short=true),if(s.schoolEnabled) "on" else "off")
+    /** "07:30–09:30, 16:30–19:30 · Mon–Fri" (the peak schedule in one line). */
+    private fun trafficSummary(s:TrafficEta.Settings)="${s.morning.label}, ${s.evening.label} · ${dayLabel(s.days,short=true)}"
 
-    /** Typical traffic adjustment details: explanation, multiplier, schedules, school dismissal and days. */
+    /** How estimates are made, and the peak windows and days. */
     private fun trafficPanel() {
         fun s()=TrafficEta.read(p)
         val box=ui.group()
@@ -132,27 +130,18 @@ internal class OfflineMapPanel(private val a:Activity,private val ui:UiKit,priva
         fill={
             box.removeAllViews()
             val st=s()
-            ui.add(box,ui.text("Adds the delay you set to arrival estimates: Wapda Town to Barkat Market (morning and evening) and " +
-                "Jail Road (school dismissal), for trips over 5 km (full from 10 km). Approximate and user-configured; " +
-                "not live traffic, and routes are not changed." + (if(st.enabled) "" else " The adjustment is off."),
+            ui.add(box,ui.text("Arrival times assume %d km/h on Canal Road, %d km/h on Ring Road and motorways, and %d km/h on other roads. ".format(
+                    TrafficEta.CANAL_KMH.roundToInt(),TrafficEta.FAST_KMH.roundToInt(),TrafficEta.CITY_KMH.roundToInt()) +
+                "In peak hours they are multiplied by %.1f for trips over %d km and by %.1f for shorter trips. ".format(java.util.Locale.US,
+                    TrafficEta.PEAK_LONG,(TrafficEta.PEAK_LONG_FROM_M/1000).roundToInt(),TrafficEta.PEAK_SHORT) +
+                "Approximate, not live traffic; routes are not changed." + (if(st.enabled) "" else " Peak hours are off."),
                 13,ui.t.textSecondary).apply { setPadding(ui.dp(16),ui.dp(10),ui.dp(16),ui.dp(10)) })
-            row("Peak delay multiplier","%.1f×".format(java.util.Locale.US,st.peak)) {
-                val choices=TrafficEta.PEAK_CHOICES
-                ThemedDialogs.Builder(a).setTitle("Peak delay multiplier")
-                    .setSingleChoiceItems(choices.map { "%.1f×".format(java.util.Locale.US,it) }.toTypedArray(),choices.indexOfFirst { abs(it-s().peak)<.01 }) { d,i->
-                        p.edit().putInt(Keys.OFFLINE_ETA_PEAK,(choices[i]*10).roundToInt()).apply();d.dismiss();changed()
-                    }.setNegativeButton("Cancel",null).show()
-            }
             row("Morning peak",st.morning.label) { editWindow("Morning peak",Keys.OFFLINE_ETA_MORNING,s().morning) { changed() } }
             row("Evening peak",st.evening.label) { editWindow("Evening peak",Keys.OFFLINE_ETA_EVENING,s().evening) { changed() } }
-            ui.add(box,ui.toggle("School dismissal (Jail Road)",st.schoolEnabled,Runnable {
-                p.edit().putBoolean(Keys.OFFLINE_ETA_SCHOOL,!s().schoolEnabled).apply();changed()
-            }))
-            if(st.schoolEnabled) row("School dismissal time",st.school.label) { editWindow("School dismissal",Keys.OFFLINE_ETA_SCHOOL_TIME,s().school) { changed() } }
             row("Days",dayLabel(st.days)) { chooseDays { changed() } }
         }
         fill()
-        ThemedDialogs.Builder(a).setTitle("Typical traffic adjustment").setView(scroll).setPositiveButton("Done",null).show()
+        ThemedDialogs.Builder(a).setTitle("Peak hours and speeds").setView(scroll).setPositiveButton("Done",null).show()
     }
 
     private fun editWindow(title:String,key:String,current:TrafficEta.Window,done:()->Unit={}) {
