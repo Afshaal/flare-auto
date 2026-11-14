@@ -12,6 +12,8 @@
 | --- | --- |
 | ![Side dock, dark theme](docs/screenshots/side-dock-dark.png) | ![Side dock, light theme](docs/screenshots/side-dock-light.png) |
 | ![Bottom dock with map](docs/screenshots/bottom-dock-map.png) | ![Clock, weather and media](docs/screenshots/clock-weather-media.png) |
+| ![Navigation on Home, dark](docs/screenshots/dark-navigation.png) | ![Navigation on Home, light](docs/screenshots/light-navigation.png) |
+| ![Clock, weather and media, dark](docs/screenshots/dark-clock-weather-media.png) | ![Clock, weather and media, light](docs/screenshots/light-clock-weather-media.png) |
 
 ## Features
 
