@@ -59,9 +59,7 @@ Screenshots show a demonstration media track and artwork.
 **Optional online features**
 
 - Enable hourly weather forecasts to download and cache them for offline use. Choose an offline age limit (two days by default); expired or unavailable forecasts fall back to sunrise/sunset.
-- Use **Launcher settings → About → Check for updates** to check the latest stable GitHub release manually. There are no automatic update checks. A downloaded update must match the app's package and signing key and have a higher version code, then Android asks you to confirm installation.
-
-## Requirements
+- Use **Check for updates** button to check the latest stable GitHub release manually. There are no automatic update checks.
 
 | | |
 | --- | --- |
@@ -76,7 +74,7 @@ Other devices may behave differently. Vendor specific shortcuts and startup sour
 ## Installation
 
 1. Download the APK attached to the GitHub release and copy it to a USB drive or another accessible location on the head unit.
-2. Open the APK with the head unit’s file manager and follow Android’s installation prompts.
+2. Open the APK with the head unitâ€™s file manager and follow Androidâ€™s installation prompts.
 3. Open Flare Auto and select it as the default Home app when prompted, or use the **Default launcher** option in Launcher settings.
 4. Configure app shortcuts in Launcher settings. Grant **Media access** to display supported media sessions, and grant location access or enter coordinates for sunrise and sunset.
 
@@ -94,13 +92,6 @@ Flare Auto provides shortcuts to projection apps; it does not provide CarPlay or
 Install the appropriate app on the head unit, then assign it to the matching shortcut in **Launcher settings**. Already using ZLink or another compatible projection app? Assign it to the CarPlay or Android Auto button in Launcher settings. The button opens the selected app; connection and compatibility depend on that app and the head unit.
 
 ### Performance
-
-To disable Android's interface animations:
-
-1. Open **Android Settings → Developer options**.
-2. Set **Window animation scale**, **Transition animation scale**, and **Animator duration scale** to **Animation off**.
-
-This removes visual transitions and can make the interface feel more responsive. It won't necessarily improve playback or app performance. Flare Auto also has its own **Animations** switch under Appearance; Android's Animator duration scale must be enabled to see launcher animations.
 
 If you're comfortable with ADB, review preinstalled apps and disable ones you've confirmed are unnecessary. Record your changes so you can reverse them, and test radio, Bluetooth and the backup camera afterward. System packages vary by device, so avoid applying a generic removal list.
 
@@ -124,7 +115,7 @@ Weather is disabled by default. When enabled, the selected coordinates are sent 
 
 ## Known limitations
 
-- Switching to the head unit’s Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
+- Switching to the head unit's Bluetooth source during CarPlay playback can cause the media card to lose artwork. v1.1.0 improves session selection and temporary artwork retention, but the DiPlay routing combination still needs more results.
 - Radio, Bluetooth, CarPlay and Android Auto shortcuts launch other apps; availability and behavior depend on the device.
 - Initial source selection and startup actions are vendor-dependent.
 - Sunset-based dimming is inactive when no solar location is available.
@@ -157,7 +148,7 @@ An APK signed with a different key cannot update an existing installation. Unins
 
 ## Credits and license
 
-Copyright © 2026 Afshaal — Flare Auto. Licensed under GPL-3.0-only. Third-party components retain their respective copyrights.
+Copyright © 2026 Afshaal Flare Auto. Licensed under GPL-3.0-only. Third-party components retain their respective copyrights.
 
 Flare Auto includes media-session code adapted from [Dashline](https://github.com/metehankaygsz/dashline), copyright 2026 Metehan Kaygisiz, GPL-3.0-only. See [LICENSE](LICENSE) and [CREDITS.md](CREDITS.md).
 
