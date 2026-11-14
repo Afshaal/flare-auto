@@ -33,6 +33,12 @@ Updates install over the previous version and keep your settings.
 
 Needs Android 8.0 or newer, landscape. CarPlay and Android Auto need their own apps and hardware.
 
+## Map packs
+
+Offline navigation needs a navigation pack. Packs for **Lahore** and **Kuwait** are attached to the
+[latest release](https://github.com/Afshaal/flare-auto/releases/latest): copy the ZIP to the head unit and choose
+**Settings › Offline maps › Import navigation pack**. Each pack's `NOTICE.md` lists its data sources.
+
 ## Build
 
 ```sh
@@ -59,6 +65,8 @@ Pull requests and issues are welcome.
 - **Planetiler:** vector tile builds (Apache-2.0, build tool only)
 - **Noto Sans and Noto Sans Arabic:** map labels (SIL Open Font License 1.1)
 - **OpenStreetMap** contributors: map, routing and search data (ODbL 1.0)
+- **Overture Maps Foundation** contributors: extra places in the Lahore pack search (CDLA-Permissive-2.0)
+- **pak-geodata** by Sohaib Bin Mohsin / The Mohsin Project Global: Lahore area names in search (ODbL / CC BY 4.0; unverified)
 - **Open-Meteo:** optional weather forecasts (CC BY 4.0)
 - **Kotlin** standard library (Apache-2.0)
 

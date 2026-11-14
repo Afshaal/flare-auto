@@ -25,8 +25,8 @@ android {
         applicationId = "app.flare.auto"
         minSdk = 26
         targetSdk = 28
-        versionCode = 4
-        versionName = "1.2.0"
+        versionCode = 5
+        versionName = "1.2.1"
         // MapLibre ships native code: arm64-v8a for the head unit (and phones), x86_64 for emulators/BlueStacks.
         ndk { abiFilters += listOf("arm64-v8a", "x86_64") }
     }
